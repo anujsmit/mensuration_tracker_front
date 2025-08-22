@@ -64,7 +64,7 @@ class UserProvider with ChangeNotifier {
   int get totalUsers => _totalUsers;
   int get currentPage => _currentPage;
 
-  static const String _baseUrl = 'http://10.228.36.188:3000/api/auth/users';
+  static const String _baseUrl = 'http://10.68.147.188:3000/api/auth/users';
   void reset() {
     _users = [];
     _currentPage = 1;

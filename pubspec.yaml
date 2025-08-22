@@ -23,6 +23,8 @@ dependencies:
   youtube_player_flutter: ^9.1.1
   flutter_inappwebview_web: ^1.1.2
   flutter_inappwebview: ^6.1.5
+  table_calendar: ^3.2.0
+  flutter_datetime_picker_plus: ^2.1.0
 
 dev_dependencies:
   flutter_test:

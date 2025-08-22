@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mensurationhealthapp/providers/admin_notification_provider.dart';
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
+import 'package:mensurationhealthapp/screens/auth/password_reset_otp_screen.dart';
 import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart';
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
 import 'package:mensurationhealthapp/providers/profile_provider.dart';
@@ -13,6 +14,7 @@ import 'package:mensurationhealthapp/screens/splash_screen.dart';
 import 'package:provider/provider.dart';
 import 'app_theme.dart';
 import 'package:mensurationhealthapp/providers/user_provider.dart';
+import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

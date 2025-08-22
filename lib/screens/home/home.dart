@@ -6,11 +6,256 @@ import 'package:mensurationhealthapp/providers/profile_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final VoidCallback? onProfileTabRequested;
 
   const HomePage({super.key, this.onProfileTabRequested});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDay = _focusedDay;
+    _loadCalendarData();
+  }
+
+  void _loadCalendarData() {
+    final authProvider = context.read<AuthProvider>();
+    final profileProvider = context.read<ProfileProvider>();
+
+    if (authProvider.isAuth && authProvider.token != null) {
+      _fetchCalendarData(authProvider.token!);
+    }
+  }
+
+  Future<void> _fetchCalendarData(String token) async {
+    try {
+      final now = DateTime.now();
+      final response = await http.get(
+        Uri.parse('http://10.68.147.188:3000/api/auth/profile/calendar?year=${now.year}&month=${now.month.toString().padLeft(2, '0')}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('Calendar data loaded: $data');
+      }
+    } catch (error) {
+      print('Error loading calendar data: $error');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchNotesForDate(DateTime date, String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://10.68.147.188:3000/api/auth/profile/notes?date=${DateFormat('yyyy-MM-dd').format(date)}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          return List<Map<String, dynamic>>.from(data);
+        }
+      }
+      return [];
+    } catch (error) {
+      print('Error fetching notes: $error');
+      return [];
+    }
+  }
+
+  void _showAddNoteDialog(BuildContext context, DateTime selectedDay, ProfileProvider profileProvider) async {
+    final authProvider = context.read<AuthProvider>();
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    TextEditingController noteController = TextEditingController();
+    String? selectedMood;
+    bool isEditing = false;
+    String? noteId;
+    List<Map<String, dynamic>> previousNotes = [];
+
+    // Fetch existing notes for the selected date
+    previousNotes = await _fetchNotesForDate(selectedDay, authProvider.token!);
+    Map<String, dynamic>? currentNote = previousNotes.isNotEmpty ? previousNotes.first : null;
+
+    if (currentNote != null) {
+      isEditing = true;
+      noteId = currentNote['id']?.toString();
+      noteController.text = currentNote['content'] ?? '';
+      selectedMood = currentNote['mood'];
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          isEditing
+              ? 'Edit Note for ${DateFormat('MMM dd, yyyy').format(selectedDay)}'
+              : 'Add Note for ${DateFormat('MMM dd, yyyy').format(selectedDay)}',
+          style: theme.textTheme.titleLarge,
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              TextField(
+                controller: noteController,
+                decoration: InputDecoration(
+                  labelText: 'Notes',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedMood,
+                decoration: InputDecoration(
+                  labelText: 'Mood',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                items: [
+                  'Happy',
+                  'Sad',
+                  'Anxious',
+                  'Energetic',
+                  'Tired',
+                  'Normal',
+                ].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  selectedMood = value;
+                },
+              ),
+              if (previousNotes.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Previous Notes',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...previousNotes.map((note) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(8.0),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: colors.outline.withOpacity(0.2)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Note: ${note['content'] ?? 'No content'}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colors.onSurface.withOpacity(0.8),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Mood: ${note['mood'] ?? 'Not set'}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurface.withOpacity(0.6),
+                              ),
+                            ),
+                            if (note['updated_at'] != null)
+                              Text(
+                                'Updated: ${DateFormat('MMM dd, yyyy, hh:mm a').format(DateTime.parse(note['updated_at']))}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colors.onSurface.withOpacity(0.6),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    )),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final url = isEditing
+                    ? 'http://10.68.147.188:3000/api/auth/profile/notes/$noteId'
+                    : 'http://10.68.147.188:3000/api/auth/profile/notes';
+                final method = isEditing ? http.put : http.post;
+
+                final response = await method(
+                  Uri.parse(url),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ${authProvider.token}',
+                  },
+                  body: json.encode({
+                    'date': DateFormat('yyyy-MM-dd').format(selectedDay),
+                    'content': noteController.text,
+                    'mood': selectedMood,
+                  }),
+                );
+
+                if (response.statusCode == 200 || response.statusCode == 201) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(isEditing ? 'Note updated successfully' : 'Note saved successfully'),
+                      backgroundColor: colors.primary,
+                    ),
+                  );
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error ${isEditing ? 'updating' : 'saving'} note'),
+                      backgroundColor: colors.error,
+                    ),
+                  );
+                }
+              } catch (error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error ${isEditing ? 'updating' : 'saving'} note: $error'),
+                    backgroundColor: colors.error,
+                  ),
+                );
+              }
+            },
+            child: Text(isEditing ? 'Update' : 'Save'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +265,6 @@ class HomePage extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    // Check authentication first
     if (!authProvider.isAuth) {
       Future.microtask(() => Navigator.pushReplacementNamed(context, '/login'));
       return Scaffold(
@@ -30,7 +274,6 @@ class HomePage extends StatelessWidget {
       );
     }
 
-    // Handle loading state
     if (profileProvider.isLoading && profileProvider.profile == null) {
       return Scaffold(
         backgroundColor: colors.surface,
@@ -52,7 +295,6 @@ class HomePage extends StatelessWidget {
       );
     }
 
-    // Handle error state
     if (profileProvider.error.isNotEmpty) {
       return Scaffold(
         backgroundColor: colors.surface,
@@ -110,7 +352,6 @@ class HomePage extends StatelessWidget {
       );
     }
 
-    // Handle case where profile doesn't exist
     if (profileProvider.profile == null) {
       return Scaffold(
         backgroundColor: colors.surface,
@@ -151,8 +392,8 @@ class HomePage extends StatelessWidget {
                         horizontal: 24, vertical: 14),
                   ),
                   onPressed: () {
-                    if (onProfileTabRequested != null) {
-                      onProfileTabRequested!();
+                    if (widget.onProfileTabRequested != null) {
+                      widget.onProfileTabRequested!();
                     } else {
                       Navigator.pushReplacement(
                         context,
@@ -180,8 +421,11 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.surface,
       body: RefreshIndicator(
-        onRefresh: () async => profileProvider.fetchProfile(
-            authProvider.userId!, authProvider.token!),
+        onRefresh: () async {
+          profileProvider.fetchProfile(
+              authProvider.userId!, authProvider.token!);
+          _loadCalendarData();
+        },
         color: colors.primary,
         child: CustomScrollView(
           slivers: [
@@ -194,6 +438,8 @@ class HomePage extends StatelessWidget {
                   FadeInUp(child: _buildCycleCountdownSection(cycleData, theme)),
                   const SizedBox(height: 20),
                   FadeInUp(child: _buildCycleOverview(cycleData, theme)),
+                  const SizedBox(height: 20),
+                  FadeInUp(child: _buildCalendarSection(profileProvider, theme)),
                   const SizedBox(height: 20),
                   FadeInUp(child: _buildCyclePhasesSection(cycleData, theme)),
                   const SizedBox(height: 20),
@@ -619,6 +865,143 @@ class HomePage extends StatelessWidget {
           style: theme.textTheme.bodyLarge?.copyWith(
             fontWeight: FontWeight.w600,
             color: theme.colorScheme.onSurface,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCalendarSection(ProfileProvider profileProvider, ThemeData theme) {
+    final colors = theme.colorScheme;
+    final cycleData = _calculateCycleData(profileProvider, DateTime.now());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Text(
+            "Cycle Calendar",
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: colors.onSurface,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          color: colors.surfaceVariant,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                TableCalendar(
+                  firstDay: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDay: DateTime.now().add(const Duration(days: 365)),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  calendarFormat: _calendarFormat,
+                  onFormatChanged: (format) {
+                    setState(() {
+                      _calendarFormat = format;
+                    });
+                  },
+                  onDaySelected: (selectedDay, focusedDay) {
+                    setState(() {
+                      _selectedDay = selectedDay;
+                      _focusedDay = focusedDay;
+                    });
+                    _showAddNoteDialog(context, selectedDay, profileProvider);
+                  },
+                  onPageChanged: (focusedDay) {
+                    _focusedDay = focusedDay;
+                  },
+                  calendarStyle: CalendarStyle(
+                    todayDecoration: BoxDecoration(
+                      color: colors.primary.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    selectedDecoration: BoxDecoration(
+                      color: colors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    markerDecoration: BoxDecoration(
+                      color: colors.secondary,
+                      shape: BoxShape.circle,
+                    ),
+                    outsideDaysVisible: false,
+                  ),
+                  headerStyle: HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                  ),
+                  eventLoader: (day) {
+                    return _getEventsForDay(day, cycleData);
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildCalendarLegend(theme),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<dynamic> _getEventsForDay(DateTime day, CycleData cycleData) {
+    final events = <dynamic>[];
+    final dayOfCycle = day.difference(DateTime.now()).inDays + cycleData.currentDay;
+    
+    if (dayOfCycle <= cycleData.periodLength) {
+      events.add('Period');
+    }
+    
+    if (dayOfCycle >= cycleData.fertileWindowStartDay && 
+        dayOfCycle <= cycleData.fertileWindowEndDay) {
+      events.add('Fertile');
+    }
+    
+    if (dayOfCycle == cycleData.ovulationDay) {
+      events.add('Ovulation');
+    }
+    
+    return events;
+  }
+
+  Widget _buildCalendarLegend(ThemeData theme) {
+    final colors = theme.colorScheme;
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildLegendItem(colors.primary, 'Period', theme),
+        _buildLegendItem(colors.secondary, 'Fertile', theme),
+        _buildLegendItem(colors.tertiary, 'Ovulation', theme),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String text, ThemeData theme) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
         ),
       ],

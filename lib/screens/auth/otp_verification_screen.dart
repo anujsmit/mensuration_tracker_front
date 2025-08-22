@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
 import 'package:mensurationhealthapp/screens/home/profile.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
@@ -60,7 +61,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             if (widget.isLogin) {
               return const HomeScreen();
             } else {
-              return ProfilePage();
+              return LoginScreen();
             }
           },
         ),
