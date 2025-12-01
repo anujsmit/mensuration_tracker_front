@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "966950404407",
+    "project_id": "mensuration-tracker",
+    "storage_bucket": "mensuration-tracker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:966950404407:android:859aa83854204edc4d1ab2",
+        "android_client_info": {
+          "package_name": "com.anujkattel.mensurationtracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNIxC_lMxxJZ3TihP9W_GKwaXV3vRbemM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

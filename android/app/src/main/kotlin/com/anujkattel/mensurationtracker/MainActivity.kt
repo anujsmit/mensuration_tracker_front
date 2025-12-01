@@ -1,4 +1,4 @@
-package com.example.mensurationhealthapp
+package com.anujkattel.mensurationtracker
 
 import io.flutter.embedding.android.FlutterActivity
 

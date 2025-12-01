@@ -5,7 +5,7 @@ class Config {
       'os_v2_app_4vhghobyyvbhbmlbfsyhodipujuma4g6w26udafxy6kq57lih7zihg2b2ujw3snr3gazagyqwefj6xmuy74u62bhcfc2dxgr4hcytzy';
 
   // API Configuration
-  static const String baseUrl = 'http://10.68.147.188:3000/api/auth/notification';
+  static const String baseUrl = 'http://10.56.42.100:3000/api/auth/notification';
   
   // Notification Configuration
   static const String androidChannelId = 'mensuration-tracker';
