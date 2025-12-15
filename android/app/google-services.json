@@ -12,7 +12,12 @@
           "package_name": "com.anujkattel.mensurationtracker"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "966950404407-j4pa1mtg8p8mdb975bc3m38ljiu386uv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBNIxC_lMxxJZ3TihP9W_GKwaXV3vRbemM"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "966950404407-j4pa1mtg8p8mdb975bc3m38ljiu386uv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
