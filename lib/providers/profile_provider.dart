@@ -13,7 +13,7 @@ class ProfileProvider with ChangeNotifier {
   String _error = '';
   bool _isLoading = false;
 
-  final String baseUrl = 'http://10.56.42.100:3000/api/auth/profile';
+  final String baseUrl = 'http://192.168.1.81:3000/api/auth/profile';
 
   Map<String, dynamic>? get profile => _profile;
   List<dynamic> get cycles => _cycles;

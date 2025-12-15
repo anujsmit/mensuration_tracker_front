@@ -18,7 +18,7 @@ class AuthProvider with ChangeNotifier {
   String? get username => _username; 
 
   // Constants
-  static const String _baseUrl = 'http://10.56.42.100:3000/api/auth';
+  static const String _baseUrl = 'http://192.168.1.81:3000/api/auth';
   static const String _userDataKey = 'userData';
   static const Duration _requestTimeout = Duration(seconds: 30);
 

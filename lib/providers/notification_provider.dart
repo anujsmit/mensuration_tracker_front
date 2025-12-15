@@ -80,7 +80,7 @@ class NotificationItem {
 
 class UserNotificationProvider with ChangeNotifier {
   // Correct base URL for the notification routes inside the auth module
-  static const String _baseUrl = 'http://10.56.42.100:3000/api/auth/notification';
+  static const String _baseUrl = 'http://192.168.1.81:3000/api/auth/notification';
 
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
