@@ -21,7 +21,8 @@ class AdminNotificationProvider with ChangeNotifier {
       _setLoading(true);
 
       final response = await http.post(
-        Uri.parse('${Config.baseUrl}/admin/send-to-all'),
+        // FIX: Use the corrected constant name apiAuthBaseUrl
+        Uri.parse('${Config.apiAuthBaseUrl}/admin/send-to-all'),
         headers: _buildHeaders(token),
         body: json.encode({
           'title': title,
@@ -57,7 +58,8 @@ class AdminNotificationProvider with ChangeNotifier {
       _setLoading(true);
 
       final response = await http.post(
-        Uri.parse('${Config.baseUrl}/admin/send'),
+        // FIX: Use the corrected constant name apiAuthBaseUrl
+        Uri.parse('${Config.apiAuthBaseUrl}/admin/send'),
         headers: _buildHeaders(token),
         body: json.encode({
           'title': title,

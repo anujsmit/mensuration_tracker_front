@@ -44,8 +44,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchCalendarData(String token) async {
     try {
       final now = DateTime.now();
+      final profileBaseUrl = context.read<ProfileProvider>().baseUrl;
       final response = await http.get(
-        Uri.parse('http://10.56.42.100:3000/api/auth/profile/calendar?year=${now.year}&month=${now.month.toString().padLeft(2, '0')}'),
+        Uri.parse(
+          '$profileBaseUrl/calendar?year=${now.year}&month=${now.month.toString().padLeft(2, '0')}',
+        ),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -61,7 +64,9 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Map<DateTime, List<Map<String, dynamic>>> _parseCalendarNotes(List<dynamic> notes) {
+  Map<DateTime, List<Map<String, dynamic>>> _parseCalendarNotes(
+    List<dynamic> notes,
+  ) {
     final Map<DateTime, List<Map<String, dynamic>>> result = {};
     for (var note in notes) {
       final date = DateTime.parse(note['note_date']).toLocal();
@@ -74,10 +79,16 @@ class _HomePageState extends State<HomePage> {
     return result;
   }
 
-  Future<List<Map<String, dynamic>>> _fetchNotesForDate(DateTime date, String token) async {
+  Future<List<Map<String, dynamic>>> _fetchNotesForDate(
+    DateTime date,
+    String token,
+  ) async {
     try {
+      final profileBaseUrl = context.read<ProfileProvider>().baseUrl;
       final response = await http.get(
-        Uri.parse('http://10.56.42.100:3000/api/auth/profile/notes?date=${DateFormat('yyyy-MM-dd').format(date)}'),
+        Uri.parse(
+          '$profileBaseUrl/notes?date=${DateFormat('yyyy-MM-dd').format(date)}',
+        ),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -94,7 +105,11 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showAddNoteDialog(BuildContext context, DateTime selectedDay, ProfileProvider profileProvider) async {
+  void _showAddNoteDialog(
+    BuildContext context,
+    DateTime selectedDay,
+    ProfileProvider profileProvider,
+  ) async {
     final authProvider = context.read<AuthProvider>();
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -104,7 +119,10 @@ class _HomePageState extends State<HomePage> {
     String? editingNoteId;
 
     // Fetch existing notes for the selected date
-    final previousNotes = await _fetchNotesForDate(selectedDay, authProvider.token!);
+    final previousNotes = await _fetchNotesForDate(
+      selectedDay,
+      authProvider.token!,
+    );
 
     // Use StateBuilder to manage dialog state
     showDialog(
@@ -141,19 +159,20 @@ class _HomePageState extends State<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  items: [
-                    'Happy',
-                    'Sad',
-                    'Anxious',
-                    'Energetic',
-                    'Tired',
-                    'Normal',
-                  ].map((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
+                  items:
+                      [
+                        'Happy',
+                        'Sad',
+                        'Anxious',
+                        'Energetic',
+                        'Tired',
+                        'Normal',
+                      ].map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
                   onChanged: (value) {
                     setDialogState(() {
                       selectedMood = value;
@@ -170,54 +189,56 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ...previousNotes.map((note) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: GestureDetector(
-                          onTap: () {
-                            setDialogState(() {
-                              editingNoteId = note['id'].toString();
-                              noteController.text = note['content'] ?? '';
-                              selectedMood = note['mood'];
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(8.0),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: editingNoteId == note['id'].toString()
-                                    ? colors.primary
-                                    : colors.outline.withOpacity(0.2),
-                              ),
-                              borderRadius: BorderRadius.circular(8),
+                  ...previousNotes.map(
+                    (note) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: GestureDetector(
+                        onTap: () {
+                          setDialogState(() {
+                            editingNoteId = note['id'].toString();
+                            noteController.text = note['content'] ?? '';
+                            selectedMood = note['mood'];
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8.0),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: editingNoteId == note['id'].toString()
+                                  ? colors.primary
+                                  : colors.outline.withOpacity(0.2),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Note: ${note['content'] ?? 'No content'}',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colors.onSurface.withOpacity(0.8),
-                                  ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Note: ${note['content'] ?? 'No content'}',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colors.onSurface.withOpacity(0.8),
                                 ),
-                                const SizedBox(height: 4),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Mood: ${note['mood'] ?? 'Not set'}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colors.onSurface.withOpacity(0.6),
+                                ),
+                              ),
+                              if (note['updated_at'] != null)
                                 Text(
-                                  'Mood: ${note['mood'] ?? 'Not set'}',
+                                  'Updated: ${DateFormat('MMM dd, yyyy, hh:mm a').format(DateTime.parse(note['updated_at']))}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: colors.onSurface.withOpacity(0.6),
                                   ),
                                 ),
-                                if (note['updated_at'] != null)
-                                  Text(
-                                    'Updated: ${DateFormat('MMM dd, yyyy, hh:mm a').format(DateTime.parse(note['updated_at']))}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colors.onSurface.withOpacity(0.6),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -231,8 +252,8 @@ class _HomePageState extends State<HomePage> {
               onPressed: () async {
                 try {
                   final url = editingNoteId != null
-                      ? 'http://10.56.42.100:3000/api/auth/profile/notes/$editingNoteId'
-                      : 'http://10.56.42.100:3000/api/auth/profile/notes';
+                      ? '${profileProvider.baseUrl}/notes/$editingNoteId'
+                      : '${profileProvider.baseUrl}/notes';
                   final method = editingNoteId != null ? http.put : http.post;
 
                   final response = await method(
@@ -248,10 +269,15 @@ class _HomePageState extends State<HomePage> {
                     }),
                   );
 
-                  if (response.statusCode == 200 || response.statusCode == 201) {
+                  if (response.statusCode == 200 ||
+                      response.statusCode == 201) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(editingNoteId != null ? 'Note updated successfully' : 'Note saved successfully'),
+                        content: Text(
+                          editingNoteId != null
+                              ? 'Note updated successfully'
+                              : 'Note saved successfully',
+                        ),
                         backgroundColor: colors.primary,
                       ),
                     );
@@ -262,7 +288,9 @@ class _HomePageState extends State<HomePage> {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error ${editingNoteId != null ? 'updating' : 'saving'} note'),
+                        content: Text(
+                          'Error ${editingNoteId != null ? 'updating' : 'saving'} note',
+                        ),
                         backgroundColor: colors.error,
                       ),
                     );
@@ -270,7 +298,9 @@ class _HomePageState extends State<HomePage> {
                 } catch (error) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error ${editingNoteId != null ? 'updating' : 'saving'} note: $error'),
+                      content: Text(
+                        'Error ${editingNoteId != null ? 'updating' : 'saving'} note: $error',
+                      ),
                       backgroundColor: colors.error,
                     ),
                   );
@@ -295,9 +325,7 @@ class _HomePageState extends State<HomePage> {
     if (!authProvider.isAuth) {
       Future.microtask(() => Navigator.pushReplacementNamed(context, '/login'));
       return Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: colors.primary),
-        ),
+        body: Center(child: CircularProgressIndicator(color: colors.primary)),
       );
     }
 
@@ -331,11 +359,7 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: colors.error,
-                ),
+                Icon(Icons.error_outline, size: 48, color: colors.error),
                 const SizedBox(height: 20),
                 Text(
                   'Error loading data',
@@ -359,7 +383,9 @@ class _HomePageState extends State<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
                   ),
                   onPressed: () => profileProvider.fetchProfile(
                     authProvider.userId!,
@@ -416,7 +442,9 @@ class _HomePageState extends State<HomePage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
                   ),
                   onPressed: () {
                     if (widget.onProfileTabRequested != null) {
@@ -425,7 +453,8 @@ class _HomePageState extends State<HomePage> {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
-                            builder: (ctx) => const ProfilePage()),
+                          builder: (ctx) => const ProfilePage(),
+                        ),
                       );
                     }
                   },
@@ -450,7 +479,9 @@ class _HomePageState extends State<HomePage> {
       body: RefreshIndicator(
         onRefresh: () async {
           profileProvider.fetchProfile(
-              authProvider.userId!, authProvider.token!);
+            authProvider.userId!,
+            authProvider.token!,
+          );
           _loadCalendarData();
         },
         color: colors.primary,
@@ -462,18 +493,23 @@ class _HomePageState extends State<HomePage> {
                 delegate: SliverChildListDelegate([
                   FadeInDown(child: _buildWelcomeCard(context, theme)),
                   const SizedBox(height: 20),
-                  FadeInUp(child: _buildCalendarSection(profileProvider, theme)),
+                  FadeInUp(
+                    child: _buildCalendarSection(profileProvider, theme),
+                  ),
                   const SizedBox(height: 20),
-                  FadeInUp(child: _buildCycleCountdownSection(cycleData, theme)),
+                  FadeInUp(
+                    child: _buildCycleCountdownSection(cycleData, theme),
+                  ),
                   const SizedBox(height: 20),
                   FadeInUp(child: _buildCyclePhasesSection(cycleData, theme)),
                   const SizedBox(height: 20),
                   FadeInUp(
-                      child: _buildFertilityDetailsSection(cycleData, theme)),
+                    child: _buildFertilityDetailsSection(cycleData, theme),
+                  ),
                   const SizedBox(height: 20),
                   FadeInUp(
-                      child: _buildHealthSummarySection(
-                          profileProvider, theme)),
+                    child: _buildHealthSummarySection(profileProvider, theme),
+                  ),
                   const SizedBox(height: 20),
                 ]),
               ),
@@ -490,9 +526,7 @@ class _HomePageState extends State<HomePage> {
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: colors.surfaceVariant,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -504,10 +538,7 @@ class _HomePageState extends State<HomePage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [
-                    colors.primary,
-                    colors.primaryContainer,
-                  ],
+                  colors: [colors.primary, colors.primaryContainer],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -519,11 +550,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ],
               ),
-              child: Icon(
-                Icons.person,
-                size: 30,
-                color: colors.onPrimary,
-              ),
+              child: Icon(Icons.person, size: 30, color: colors.onPrimary),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -557,8 +584,9 @@ class _HomePageState extends State<HomePage> {
     final colors = theme.colorScheme;
     final daysUntilNextPeriod = data.cycleLength - data.currentDay;
     final daysUntilFertile = data.fertileWindowStartDay - data.currentDay;
-    final isFertile = data.currentDay >= data.fertileWindowStartDay && 
-                      data.currentDay <= data.fertileWindowEndDay;
+    final isFertile =
+        data.currentDay >= data.fertileWindowStartDay &&
+        data.currentDay <= data.fertileWindowEndDay;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -613,9 +641,10 @@ class _HomePageState extends State<HomePage> {
                 _buildCountdownItem(
                   icon: Icons.egg,
                   label: "Next Ovulation",
-                  days: data.ovulationDay > data.currentDay 
-                      ? data.ovulationDay - data.currentDay 
-                      : (data.cycleLength - data.currentDay) + data.ovulationDay,
+                  days: data.ovulationDay > data.currentDay
+                      ? data.ovulationDay - data.currentDay
+                      : (data.cycleLength - data.currentDay) +
+                            data.ovulationDay,
                   color: colors.tertiary,
                   theme: theme,
                 ),
@@ -684,7 +713,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildCalendarSection(ProfileProvider profileProvider, ThemeData theme) {
+  Widget _buildCalendarSection(
+    ProfileProvider profileProvider,
+    ThemeData theme,
+  ) {
     final colors = theme.colorScheme;
     final cycleData = _calculateCycleData(profileProvider, DateTime.now());
 
@@ -757,7 +789,7 @@ class _HomePageState extends State<HomePage> {
                     final dateOnly = DateTime(day.year, day.month, day.day);
                     return [
                       ..._getEventsForDay(day, cycleData),
-                      if (_notes[dateOnly]?.isNotEmpty ?? false) 'Note'
+                      if (_notes[dateOnly]?.isNotEmpty ?? false) 'Note',
                     ];
                   },
                 ),
@@ -773,27 +805,28 @@ class _HomePageState extends State<HomePage> {
 
   List<dynamic> _getEventsForDay(DateTime day, CycleData cycleData) {
     final events = <dynamic>[];
-    final dayOfCycle = day.difference(DateTime.now()).inDays + cycleData.currentDay;
-    
+    final dayOfCycle =
+        day.difference(DateTime.now()).inDays + cycleData.currentDay;
+
     if (dayOfCycle <= cycleData.periodLength) {
       events.add('Period');
     }
-    
-    if (dayOfCycle >= cycleData.fertileWindowStartDay && 
+
+    if (dayOfCycle >= cycleData.fertileWindowStartDay &&
         dayOfCycle <= cycleData.fertileWindowEndDay) {
       events.add('Fertile');
     }
-    
+
     if (dayOfCycle == cycleData.ovulationDay) {
       events.add('Ovulation');
     }
-    
+
     return events;
   }
 
   Widget _buildCalendarLegend(ThemeData theme) {
     final colors = theme.colorScheme;
-    
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
@@ -811,10 +844,7 @@ class _HomePageState extends State<HomePage> {
         Container(
           width: 12,
           height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
         Text(
@@ -866,7 +896,8 @@ class _HomePageState extends State<HomePage> {
                   "Day ${data.fertileWindowStartDay}-${data.fertileWindowEndDay}",
               icon: Icons.favorite,
               color: colors.secondary,
-              isActive: data.currentDay >= data.fertileWindowStartDay &&
+              isActive:
+                  data.currentDay >= data.fertileWindowStartDay &&
                   data.currentDay <= data.fertileWindowEndDay,
               theme: theme,
             ),
@@ -924,8 +955,11 @@ class _HomePageState extends State<HomePage> {
                 color: color.withOpacity(isActive ? 0.2 : 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon,
-                  size: 20, color: color.withOpacity(isActive ? 1 : 0.7)),
+              child: Icon(
+                icon,
+                size: 20,
+                color: color.withOpacity(isActive ? 1 : 0.7),
+              ),
             ),
             const Spacer(),
             Text(
@@ -954,7 +988,8 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildFertilityDetailsSection(CycleData data, ThemeData theme) {
     final colors = theme.colorScheme;
-    final isFertile = data.currentDay >= data.fertileWindowStartDay &&
+    final isFertile =
+        data.currentDay >= data.fertileWindowStartDay &&
         data.currentDay <= data.fertileWindowEndDay;
 
     return Column(
@@ -1057,7 +1092,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHealthSummarySection(
-      ProfileProvider profileProvider, ThemeData theme) {
+    ProfileProvider profileProvider,
+    ThemeData theme,
+  ) {
     final colors = theme.colorScheme;
 
     return Column(
@@ -1134,8 +1171,11 @@ class _HomePageState extends State<HomePage> {
   }) {
     return Row(
       children: [
-        Icon(icon,
-            size: 20, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+        Icon(
+          icon,
+          size: 20,
+          color: theme.colorScheme.onSurface.withOpacity(0.6),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
@@ -1157,10 +1197,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _calculateNextFertileWindowStart(CycleData data) {
-    final nextCycleStart = DateTime.now()
-        .add(Duration(days: data.cycleLength - data.currentDay + 1));
-    final nextFertileStart =
-        nextCycleStart.add(Duration(days: data.fertileWindowStartDay - 1));
+    final nextCycleStart = DateTime.now().add(
+      Duration(days: data.cycleLength - data.currentDay + 1),
+    );
+    final nextFertileStart = nextCycleStart.add(
+      Duration(days: data.fertileWindowStartDay - 1),
+    );
     return DateFormat('MMM dd').format(nextFertileStart);
   }
 
@@ -1196,9 +1238,9 @@ class _HomePageState extends State<HomePage> {
       ovulationDay: ovulationDay,
       fertileWindowStartDay: fertileWindowStartDay,
       fertileWindowEndDay: fertileWindowEndDay,
-      nextPeriodDate: DateFormat('MMM dd').format(
-        lastPeriodDate.add(Duration(days: cycleLength)),
-      ),
+      nextPeriodDate: DateFormat(
+        'MMM dd',
+      ).format(lastPeriodDate.add(Duration(days: cycleLength))),
       lastPeriodDate: DateFormat('MMM dd').format(lastPeriodDate),
     );
   }

@@ -5,9 +5,8 @@ class Config {
       'os_v2_app_4vhghobyyvbhbmlbfsyhodipujuma4g6w26udafxy6kq57lih7zihg2b2ujw3snr3gazagyqwefj6xmuy74u62bhcfc2dxgr4hcytzy';
 
   // API Configuration
-  static const String baseUrl = 'http://192.168.1.81:3000/api/auth/notification';
-  
-  // Notification Configuration
+  // FIX: Rename and set to the root of the authentication API endpoints.
+  static const String apiAuthBaseUrl = 'http://192.168.1.81:3000/api/auth';
   static const String androidChannelId = 'mensuration-tracker';
   static const String androidChannelName = 'mensuration-tracker';
   static const String notificationIcon = 'ic_stat_onesignal_default';

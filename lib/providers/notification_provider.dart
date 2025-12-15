@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-
+import 'package:mensurationhealthapp/config/config.dart';
 // Helper to parse color from a hex string (e.g., "#RRGGBB")
 Color _colorFromHex(String hexColor) {
   try {
@@ -80,7 +80,7 @@ class NotificationItem {
 
 class UserNotificationProvider with ChangeNotifier {
   // Correct base URL for the notification routes inside the auth module
-  static const String _baseUrl = 'http://192.168.1.81:3000/api/auth/notification';
+  static const String _baseUrl = '${Config.apiAuthBaseUrl}/notification';
 
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;

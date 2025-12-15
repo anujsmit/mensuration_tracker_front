@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
+import 'package:mensurationhealthapp/config/config.dart';
 
 class UserModel {
   final int id;
@@ -26,27 +27,27 @@ class UserModel {
 
   // Factory constructor to create a UserModel from JSON
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
-        id: json['id'],
-        name: json['name'],
-        email: json['email'],
-        username: json['username'],
-        verified: json['verified'] == true || json['verified'] == 1,
-        isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
-        createdAt: DateTime.parse(json['createdAt']),
-        lastLogin: json['lastLogin'] != null
-            ? DateTime.parse(json['lastLogin'])
-            : null,
-      );
+    id: json['id'],
+    name: json['name'],
+    email: json['email'],
+    username: json['username'],
+    verified: json['verified'] == true || json['verified'] == 1,
+    isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
+    createdAt: DateTime.parse(json['createdAt']),
+    lastLogin: json['lastLogin'] != null
+        ? DateTime.parse(json['lastLogin'])
+        : null,
+  );
 
   // **FIX: Add toJson method for serialization**
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'email': email,
-        'username': username,
-        'verified': verified,
-        'isAdmin': isAdmin,
-      };
+    'id': id,
+    'name': name,
+    'email': email,
+    'username': username,
+    'verified': verified,
+    'isAdmin': isAdmin,
+  };
 }
 
 class UserProvider with ChangeNotifier {
@@ -64,7 +65,7 @@ class UserProvider with ChangeNotifier {
   int get totalUsers => _totalUsers;
   int get currentPage => _currentPage;
 
-  static const String _baseUrl = 'http://10.68.147.188:3000/api/auth/users';
+  static const String _baseUrl = '${Config.apiAuthBaseUrl}/users';
   void reset() {
     _users = [];
     _currentPage = 1;
@@ -94,7 +95,7 @@ class UserProvider with ChangeNotifier {
         if (verified != null) 'verified': verified.toString(),
       };
 
-      final uri = Uri.parse('$_baseUrl/users').replace(queryParameters: params);
+      final uri = Uri.parse('$_baseUrl').replace(queryParameters: params);
       final response = await http.get(
         uri,
         headers: {
@@ -201,7 +202,10 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> updateUserVerification(
-      int userId, bool verified, String token) async {
+    int userId,
+    bool verified,
+    String token,
+  ) async {
     try {
       _isLoading = true;
       notifyListeners();
@@ -236,11 +240,13 @@ class UserProvider with ChangeNotifier {
           }
         } else {
           throw Exception(
-              responseData['message'] ?? 'Failed to update verification');
+            responseData['message'] ?? 'Failed to update verification',
+          );
         }
       } else {
         throw Exception(
-            'Failed to update verification: ${response.statusCode}');
+          'Failed to update verification: ${response.statusCode}',
+        );
       }
     } catch (error) {
       _error = error.toString();

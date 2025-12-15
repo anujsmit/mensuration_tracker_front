@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mensurationhealthapp/config/config.dart';
 
 class AuthProvider with ChangeNotifier {
   String? _token;
@@ -15,10 +16,10 @@ class AuthProvider with ChangeNotifier {
   String? get token => _token;
   String? get userId => _userId;
   String? get email => _email;
-  String? get username => _username; 
+  String? get username => _username;
 
   // Constants
-  static const String _baseUrl = 'http://192.168.1.81:3000/api/auth';
+  static const String _baseUrl = Config.apiAuthBaseUrl;
   static const String _userDataKey = 'userData';
   static const Duration _requestTimeout = Duration(seconds: 30);
 
@@ -84,20 +85,19 @@ class AuthProvider with ChangeNotifier {
     );
   }
 
-Future<bool> verifyAdminStatus(String token) async {
-  final response = await http.get(Uri.parse('$_baseUrl/api/verify'),
-    headers: {
-      'Authorization': 'Bearer $token',
-    },
-  );
+  Future<bool> verifyAdminStatus(String token) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/verify'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
 
-  if (response.statusCode == 200) {
-    final json = jsonDecode(response.body);
-    return json['isAdmin'] == true;
-  } else {
-    throw Exception('Failed to verify admin status');
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json['isAdmin'] == true;
+    } else {
+      throw Exception('Failed to verify admin status');
+    }
   }
-}
 
   Future<Map<String, dynamic>> verifyOtp(String email, String otp) async {
     try {
@@ -173,11 +173,7 @@ Future<bool> verifyAdminStatus(String token) async {
       return null;
     } on HttpException catch (e) {
       if (e.statusCode == 403 && e.message.contains('OTP')) {
-        return {
-          'requires_otp': true,
-          'email': email,
-          'message': e.message,
-        };
+        return {'requires_otp': true, 'email': email, 'message': e.message};
       }
       rethrow;
     }
@@ -196,7 +192,8 @@ Future<bool> verifyAdminStatus(String token) async {
       _userId = extractedData['userId'];
       _email = extractedData['email'];
       _username = extractedData['username'];
-      _isAdmin = extractedData['isAdmin'] ??
+      _isAdmin =
+          extractedData['isAdmin'] ??
           false; // Get admin status from stored data
 
       // First verify token is valid
@@ -230,8 +227,9 @@ Future<bool> verifyAdminStatus(String token) async {
       final parts = token.split('.');
       if (parts.length != 3) return false;
 
-      final payload = json
-          .decode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+      final payload = json.decode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
 
       return payload['isAdmin'] ?? false;
     } catch (e) {
@@ -241,10 +239,12 @@ Future<bool> verifyAdminStatus(String token) async {
 
   Future<bool> checkAdminStatus(String token) async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/check-admin'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(_requestTimeout);
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/check-admin'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(_requestTimeout);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

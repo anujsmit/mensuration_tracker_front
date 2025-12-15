@@ -4,6 +4,11 @@ import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/profile_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'dart:typed_data';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -26,19 +31,303 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // Only fetch if authenticated
     if (authProvider.isAuth && authProvider.token != null) {
-      // The profile provider fetches all necessary profile data, including username
+      // Fetch profile which includes username
       profileProvider.fetchProfile(authProvider.userId!, authProvider.token!);
+
+      // Also ensure auth provider has username from profile if needed
+      // This will be updated when profile is fetched
     }
   }
 
   bool _isProfileComplete(Map<String, dynamic>? profile) {
     if (profile == null) return false;
-    // Check for essential health profile fields
-    return profile['age'] != null &&
-        profile['weight'] != null &&
-        profile['height'] != null &&
-        profile['cycle_length'] != null &&
-        profile['last_period_date'] != null;
+
+    // Check for essential health profile fields with more tolerance
+    final requiredFields = [
+      'age',
+      'weight',
+      'height',
+      'cycle_length',
+      'last_period_date'
+    ];
+    final optionalFields = [
+      'age_at_menarche',
+      'flow_regularity',
+      'bleeding_duration',
+      'flow_amount'
+    ];
+
+    // All required fields must be present and not null
+    for (var field in requiredFields) {
+      if (profile[field] == null) return false;
+    }
+
+    // At least 2 out of 4 optional fields should be filled
+    final filledOptional =
+        optionalFields.where((field) => profile[field] != null).length;
+
+    return filledOptional >= 2; // More lenient check
+  }
+
+  // UPDATED: Function to handle permission request and report download
+  Future<void> _downloadReport() async {
+    final authProvider = context.read<AuthProvider>();
+    final profileProvider = context.read<ProfileProvider>();
+
+    final token = authProvider.token;
+
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Authentication error. Please log in again.')),
+      );
+      return;
+    }
+
+    // Show loading message
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.white),
+            const SizedBox(width: 12),
+            Text('Downloading report...',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: Colors.white)),
+          ],
+        ),
+        duration: const Duration(seconds: 5),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
+    );
+
+    // Call the API first
+    final result = await profileProvider.downloadHealthReport(token);
+
+    if (result['success'] == true) {
+      try {
+        final data = result['data'] as Uint8List;
+        final filename = result['filename'] as String;
+
+        // Handle file saving with proper permission handling
+        await _saveFileWithPermissions(data, filename);
+      } catch (e) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving file: ${e.toString()}')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message'] as String)),
+      );
+    }
+  }
+
+  Future<void> _saveFileWithPermissions(Uint8List data, String filename) async {
+    if (Platform.isAndroid) {
+      await _saveFileAndroid(data, filename);
+    } else if (Platform.isIOS) {
+      await _saveFileIOS(data, filename);
+    } else {
+      await _saveFileOther(data, filename);
+    }
+  }
+
+  Future<void> _saveFileAndroid(Uint8List data, String filename) async {
+    // For Android, we need to handle different SDK versions
+    final sdkVersion = await _getAndroidSdkVersion();
+
+    if (sdkVersion >= 30) {
+      // Android 11+ - Use MANAGE_EXTERNAL_STORAGE
+      await _saveFileAndroid11Plus(data, filename);
+    } else if (sdkVersion >= 29) {
+      // Android 10 - Use scoped storage with MediaStore
+      await _saveFileAndroid10(data, filename);
+    } else {
+      // Android 9 and below - Use traditional storage
+      await _saveFileAndroidLegacy(data, filename);
+    }
+  }
+
+  Future<int> _getAndroidSdkVersion() async {
+    if (Platform.isAndroid) {
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      return androidInfo.version.sdkInt;
+    }
+    return 0;
+  }
+
+  Future<void> _saveFileAndroid11Plus(Uint8List data, String filename) async {
+    // Check for MANAGE_EXTERNAL_STORAGE permission
+    PermissionStatus status = await Permission.manageExternalStorage.status;
+
+    if (!status.isGranted) {
+      status = await Permission.manageExternalStorage.request();
+
+      if (status.isPermanentlyDenied) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+                'Storage permission is required to save the file. Please enable it in Settings.'),
+            action: SnackBarAction(
+              label: 'SETTINGS',
+              onPressed: () => openAppSettings(),
+            ),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+        return;
+      }
+
+      if (status.isDenied) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Permission denied. Cannot save file.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Try to save to Downloads directory
+    final downloadsDir = Directory('/storage/emulated/0/Download');
+    if (!await downloadsDir.exists()) {
+      await downloadsDir.create(recursive: true);
+    }
+
+    final savePath = '${downloadsDir.path}/$filename';
+    final file = File(savePath);
+    await file.writeAsBytes(data);
+
+    _showSuccessMessage(file);
+  }
+
+  Future<void> _saveFileAndroid10(Uint8List data, String filename) async {
+    // For Android 10, we can use the app's private directory or MediaStore
+    // Let's use the app's documents directory which doesn't require permission
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final savePath = '${appDocDir.path}/$filename';
+    final file = File(savePath);
+    await file.writeAsBytes(data);
+
+    _showSuccessMessage(file);
+
+    // Optional: Try to copy to public Downloads folder if permission is granted
+    try {
+      PermissionStatus status = await Permission.storage.status;
+      if (status.isGranted) {
+        final downloadsDir = Directory('/storage/emulated/0/Download');
+        if (await downloadsDir.exists()) {
+          final publicPath = '${downloadsDir.path}/$filename';
+          await file.copy(publicPath);
+        }
+      }
+    } catch (e) {
+      // Ignore error - file is already saved to app's directory
+    }
+  }
+
+  Future<void> _saveFileAndroidLegacy(Uint8List data, String filename) async {
+    // For Android 9 and below, use traditional storage permission
+    PermissionStatus status = await Permission.storage.status;
+
+    if (!status.isGranted) {
+      status = await Permission.storage.request();
+
+      if (status.isPermanentlyDenied) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+                'Storage permission is required to save the file. Please enable it in Settings.'),
+            action: SnackBarAction(
+              label: 'SETTINGS',
+              onPressed: () => openAppSettings(),
+            ),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+        return;
+      }
+
+      if (status.isDenied) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Permission denied. Cannot save file.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Save to Downloads directory
+    final downloadsDir = Directory('/storage/emulated/0/Download');
+    if (!await downloadsDir.exists()) {
+      await downloadsDir.create(recursive: true);
+    }
+
+    final savePath = '${downloadsDir.path}/$filename';
+    final file = File(savePath);
+    await file.writeAsBytes(data);
+
+    _showSuccessMessage(file);
+  }
+
+  Future<void> _saveFileIOS(Uint8List data, String filename) async {
+    // For iOS, save to app's documents directory
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final savePath = '${appDocDir.path}/$filename';
+    final file = File(savePath);
+    await file.writeAsBytes(data);
+
+    _showSuccessMessage(file);
+  }
+
+  Future<void> _saveFileOther(Uint8List data, String filename) async {
+    // For other platforms
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final savePath = '${appDocDir.path}/$filename';
+    final file = File(savePath);
+    await file.writeAsBytes(data);
+
+    _showSuccessMessage(file);
+  }
+
+  void _showSuccessMessage(File file) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Report saved successfully!',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('Saved as: ${file.path.split('/').last}',
+                style: TextStyle(fontSize: 12)),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        action: SnackBarAction(
+          label: 'OPEN',
+          onPressed: () {
+            // You could add functionality to open the file here
+          },
+        ),
+      ),
+    );
   }
 
   // MODIFIED: This widget now accepts both providers to correctly display data.
@@ -46,6 +335,12 @@ class _ProfilePageState extends State<ProfilePage> {
     ProfileProvider profileProvider,
     AuthProvider authProvider,
   ) {
+    // Use username from profile provider if auth provider doesn't have it
+    final displayUsername =
+        authProvider.username ?? profileProvider.username ?? 'user';
+    final displayEmail =
+        authProvider.email ?? profileProvider.email ?? 'No email provided';
+
     return FadeInDown(
       duration: const Duration(milliseconds: 600),
       child: Container(
@@ -140,18 +435,21 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 16),
             Text(
-              authProvider.username ?? 'user',
+              displayUsername,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
             ),
             const SizedBox(height: 4),
             Text(
-              authProvider.email ?? 'No email provided',
+              displayEmail,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.7),
+                  ),
             ),
             if (!_isProfileComplete(profileProvider.profile))
               Padding(
@@ -159,9 +457,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Text(
                   'Complete your profile for better insights',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ),
           ],
@@ -191,9 +489,9 @@ class _ProfilePageState extends State<ProfilePage> {
               Text(
                 title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
               const Divider(height: 20, thickness: 1),
               ...children,
@@ -227,18 +525,21 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-              ),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.8),
+                  ),
             ),
           ),
           Text(
             isEmpty ? 'Not set' : value,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: isEmpty
-                  ? Theme.of(context).colorScheme.onSurface.withOpacity(0.4)
-                  : Theme.of(context).colorScheme.onSurface,
-              fontWeight: isEmpty ? FontWeight.normal : FontWeight.w500,
-            ),
+                  color: isEmpty
+                      ? Theme.of(context).colorScheme.onSurface.withOpacity(0.4)
+                      : Theme.of(context).colorScheme.onSurface,
+                  fontWeight: isEmpty ? FontWeight.normal : FontWeight.w500,
+                ),
           ),
         ],
       ),
@@ -322,6 +623,27 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 8),
 
               if (!isProfileComplete) _buildCompleteProfileBanner(),
+
+              // NEW: Download Report Button
+              FadeInUp(
+                duration: const Duration(milliseconds: 600),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download Health Report (CSV)'),
+                    onPressed:
+                        profileProvider.isLoading ? null : _downloadReport,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               _buildProfileSection('Account Information', [
                 _buildProfileItem(
@@ -445,9 +767,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 Text(
                   'Profile Incomplete',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                    fontWeight: FontWeight.bold,
-                  ),
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ],
             ),
@@ -455,10 +777,10 @@ class _ProfilePageState extends State<ProfilePage> {
             Text(
               'Complete your health profile to get personalized insights and predictions.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onErrorContainer.withOpacity(0.9),
-              ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onErrorContainer.withOpacity(0.9),
+                  ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -487,9 +809,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Text(
                   'Complete Profile',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onError,
-                    fontWeight: FontWeight.bold,
-                  ),
+                        color: Theme.of(context).colorScheme.onError,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ),
             ),
@@ -584,15 +906,13 @@ class __EditProfileDialogState extends State<_EditProfileDialog> {
       text: widget.profileData['period_interval']?.toString() ?? '28',
     );
 
-    _flowRegularity =
-        widget.profileData['flow_regularity'] != null &&
+    _flowRegularity = widget.profileData['flow_regularity'] != null &&
             _flowRegularityOptions.contains(
               widget.profileData['flow_regularity'],
             )
         ? widget.profileData['flow_regularity']
         : null;
-    _flowAmount =
-        widget.profileData['flow_amount'] != null &&
+    _flowAmount = widget.profileData['flow_amount'] != null &&
             _flowAmountOptions.contains(widget.profileData['flow_amount'])
         ? widget.profileData['flow_amount']
         : null;
@@ -769,10 +1089,10 @@ class __EditProfileDialogState extends State<_EditProfileDialog> {
                   child: Text(
                     'Edit Profile',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface,
-                      letterSpacing: 0.5,
-                    ),
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          letterSpacing: 0.5,
+                        ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -924,8 +1244,8 @@ class __EditProfileDialogState extends State<_EditProfileDialog> {
                       child: Text(
                         'Save',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        ),
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
                       ),
                     ),
                   ],
@@ -1036,8 +1356,8 @@ class __EditProfileDialogState extends State<_EditProfileDialog> {
               child: Text(
                 option,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
               ),
             ),
           )
