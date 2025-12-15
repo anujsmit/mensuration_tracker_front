@@ -1,6 +1,8 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_core/firebase_core.dart';  // Add this
+import 'package:firebase_core/firebase_core.dart';
 import 'package:mensurationhealthapp/providers/admin_notification_provider.dart';
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart';
@@ -50,7 +52,7 @@ class MyApp extends StatelessWidget {
         darkTheme: AppTheme.darkTheme,
         home: const SplashScreen(),
         routes: {
-          '/login': (context) => const FirebaseLoginScreen(), // Updated
+          '/login': (context) => const FirebaseLoginScreen(), // Changed from LoginScreen to FirebaseLoginScreen
           '/signup': (context) => const SignupScreen(),
           '/home': (context) => const HomeScreen(),
           '/profile': (context) => const ProfilePage(),

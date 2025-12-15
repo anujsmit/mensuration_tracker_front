@@ -7,174 +7,264 @@ import 'package:http/http.dart' as http;
 import 'package:mensurationhealthapp/config/config.dart';
 
 class AuthProvider with ChangeNotifier {
+
+  // =========================
+  // STATE
+  // =========================
   String? _token;
   String? _userId;
   String? _email;
   String? _username;
   bool _isAdmin = false;
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  bool _isLoading = false;
 
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
+
+  // =========================
+  // GETTERS
+  // =========================
   bool get isAuth => _token != null;
   bool get isAdmin => _isAdmin;
+  bool get isLoading => _isLoading;
+
   String? get token => _token;
   String? get userId => _userId;
   String? get email => _email;
   String? get username => _username;
   User? get firebaseUser => _firebaseAuth.currentUser;
 
-  // Constants
+  // =========================
+  // CONSTANTS
+  // =========================
   static const String _baseUrl = Config.apiAuthBaseUrl;
   static const String _userDataKey = 'userData';
-  static const Duration _requestTimeout = Duration(seconds: 30);
+  static const Duration _timeout = Duration(seconds: 30);
 
+  // ======================================================
+  // 1️⃣ GOOGLE SIGN-IN (FIXED FOR google_sign_in 7.x)
+  // ======================================================
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      // Trigger Google Sign In flow
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      _isLoading = true;
+      notifyListeners();
+
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.authenticate();
+
       if (googleUser == null) return null;
 
-      // Obtain auth details
-      final GoogleSignInAuthentication googleAuth = 
-          await googleUser.authentication;
+      final googleAuth = await googleUser.authentication;
 
-      // Create Firebase credential
+      if (googleAuth.idToken == null) {
+        throw Exception("Google ID Token missing");
+      }
+
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Sign in to Firebase with Google credential
-      final UserCredential userCredential = 
+      final userCredential =
           await _firebaseAuth.signInWithCredential(credential);
 
-      // Get Firebase user
-      final User? user = userCredential.user;
-      if (user != null) {
-        // Create or update user in your backend
-        await _syncUserWithBackend(user);
-      }
+      final user = userCredential.user;
+      if (user == null) throw Exception("Firebase user null");
+
+      _email = user.email;
+      _username = user.displayName ?? user.email?.split('@')[0];
+
+      await _syncFirebaseUserWithBackend(user);
 
       return userCredential;
-    } catch (error) {
-      print('Google Sign In Error: $error');
+    } catch (e) {
+      debugPrint("Google Sign-In Error: $e");
       rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  Future<void> _syncUserWithBackend(User firebaseUser) async {
+  // ======================================================
+  // 2️⃣ SEND FIREBASE TOKEN TO BACKEND
+  // ======================================================
+  Future<void> _syncFirebaseUserWithBackend(User user) async {
     try {
-      final idToken = await firebaseUser.getIdToken();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/auth/firebase'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'uid': firebaseUser.uid,
-          'email': firebaseUser.email,
-          'name': firebaseUser.displayName,
-          'photoUrl': firebaseUser.photoURL,
-          'idToken': idToken,
-        }),
-      ).timeout(_requestTimeout);
+      final idToken = await user.getIdToken(true);
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        
-        // Store backend token and user data
-        _token = responseData['token'];
-        _userId = responseData['user_id']?.toString();
-        _email = firebaseUser.email;
-        _username = firebaseUser.displayName ?? firebaseUser.email?.split('@')[0];
-        _isAdmin = responseData['isAdmin'] ?? false;
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/auth/google'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'idToken': idToken}),
+          )
+          .timeout(_timeout);
 
-        await _saveUserDataToPrefs();
-        notifyListeners();
-      } else {
-        throw Exception('Failed to sync with backend');
+      if (response.statusCode != 200) {
+        throw Exception('Backend authentication failed');
       }
-    } catch (error) {
-      print('Sync with backend error: $error');
+
+      final data = jsonDecode(response.body);
+
+      _token = data['token'];
+      _userId = data['user_id']?.toString();
+      _isAdmin = data['isAdmin'] ?? false;
+
+      await _saveUserData();
+    } catch (e) {
+      debugPrint("Backend Sync Error: $e");
       rethrow;
     }
   }
 
+  // ======================================================
+  // 3️⃣ AUTO LOGIN
+  // ======================================================
   Future<bool> tryAutoLogin() async {
-    // First check Firebase auth state
     final firebaseUser = _firebaseAuth.currentUser;
+
     if (firebaseUser != null) {
       try {
-        // Sync with backend
-        await _syncUserWithBackend(firebaseUser);
+        _email = firebaseUser.email;
+        _username =
+            firebaseUser.displayName ?? firebaseUser.email?.split('@')[0];
+        await _syncFirebaseUserWithBackend(firebaseUser);
+        notifyListeners();
         return true;
-      } catch (error) {
-        print('Auto-login sync error: $error');
-        await logout();
+      } catch (_) {
+        await signOut();
         return false;
       }
     }
 
-    // Fallback to stored token (for backward compatibility)
     final prefs = await SharedPreferences.getInstance();
     if (!prefs.containsKey(_userDataKey)) return false;
 
-    try {
-      final extractedData = 
-          json.decode(prefs.getString(_userDataKey)!) as Map<String, dynamic>;
-      
-      _token = extractedData['token'];
-      _userId = extractedData['userId'];
-      _email = extractedData['email'];
-      _username = extractedData['username'];
-      _isAdmin = extractedData['isAdmin'] ?? false;
+    final data = jsonDecode(prefs.getString(_userDataKey)!);
 
-      if (_token == null || _userId == null) {
-        await logout();
-        return false;
-      }
+    _token = data['token'];
+    _userId = data['userId'];
+    _email = data['email'];
+    _username = data['username'];
+    _isAdmin = data['isAdmin'] ?? false;
 
-      // Verify token with server
-      try {
-        final serverAdminStatus = await checkAdminStatus(_token!);
-        _isAdmin = serverAdminStatus;
-        await _saveUserDataToPrefs();
-      } catch (e) {
-        print('Admin verification failed: $e');
-      }
-
-      notifyListeners();
-      return true;
-    } catch (e) {
-      print('Auto-login error: $e');
-      await _clearUserData();
+    if (_token == null || _userId == null) {
+      await signOut();
       return false;
     }
+
+    notifyListeners();
+    return true;
   }
 
-  Future<void> logout() async {
-    try {
-      await _googleSignIn.signOut();
-      await _firebaseAuth.signOut();
-    } catch (e) {
-      print('Firebase logout error: $e');
-    }
-    
+  // ======================================================
+  // 4️⃣ SIGN OUT
+  // ======================================================
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _firebaseAuth.signOut();
+
     _token = null;
     _userId = null;
     _email = null;
     _username = null;
     _isAdmin = false;
-    await _clearUserData();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userDataKey);
+
     notifyListeners();
   }
 
-  // Keep existing methods but remove email/password login
-  // ... (other methods remain the same)
+  // ======================================================
+  // 5️⃣ PHONE OTP
+  // ======================================================
+  Future<Map<String, dynamic>> requestPhoneOtp(String phone) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/phone/request-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'phoneNumber': phone}),
+        )
+        .timeout(_timeout);
 
-  Future<void> _saveUserDataToPrefs() async {
+    final data = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(data['message'] ?? 'OTP request failed');
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> verifyPhoneOtp(
+      String phone, String otp) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/phone/verify-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'phoneNumber': phone, 'otp': otp}),
+        )
+        .timeout(_timeout);
+
+    final data = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(data['message'] ?? 'OTP verification failed');
+    }
+
+    _token = data['token'];
+    _userId = data['user_id']?.toString();
+    _email = data['email'];
+    _username = data['username'];
+    _isAdmin = data['isAdmin'] ?? false;
+
+    await _saveUserData();
+    notifyListeners();
+    return data;
+  }
+
+  // ======================================================
+  // 6️⃣ EMAIL OTP
+  // ======================================================
+  Future<Map<String, dynamic>> verifyOtp(
+      String email, String otp) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/verify-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email, 'otp': otp}),
+        )
+        .timeout(_timeout);
+
+    final data = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      throw Exception(data['message'] ?? 'OTP failed');
+    }
+    return data;
+  }
+
+  Future<void> resendOtp(String email) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/resend-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email}),
+        )
+        .timeout(_timeout);
+
+    if (res.statusCode != 200) {
+      throw Exception('Failed to resend OTP');
+    }
+  }
+
+  // ======================================================
+  // 7️⃣ LOCAL STORAGE
+  // ======================================================
+  Future<void> _saveUserData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _userDataKey,
-      json.encode({
+      jsonEncode({
         'token': _token,
         'userId': _userId,
         'email': _email,
@@ -182,10 +272,5 @@ class AuthProvider with ChangeNotifier {
         'isAdmin': _isAdmin,
       }),
     );
-  }
-
-  Future<void> _clearUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userDataKey);
   }
 }
