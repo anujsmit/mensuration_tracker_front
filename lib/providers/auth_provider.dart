@@ -1,4 +1,5 @@
-// anujsmit/mensuration_tracker_front/mensuration_tracker_front-f791c10d8517a5f857299bbd66976c42835a8ba8a/lib/providers/auth_provider.dart (MODIFIED)
+// lib/providers/auth_provider.dart (FIXED)
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +9,6 @@ import 'package:http/http.dart' as http;
 import 'package:mensurationhealthapp/config/config.dart';
 
 class AuthProvider with ChangeNotifier {
-
   // =========================
   // STATE
   // =========================
@@ -43,7 +43,7 @@ class AuthProvider with ChangeNotifier {
   static const Duration _timeout = Duration(seconds: 30);
 
   // ======================================================
-  // 1️⃣ GOOGLE SIGN-IN 
+  // 1️⃣ GOOGLE SIGN-IN
   // ======================================================
   Future<UserCredential?> signInWithGoogle() async {
     try {
@@ -86,6 +86,29 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+// Add this debug method to AuthProvider class
+  Future<void> _debugNetworkRequest(Uri uri, String body) async {
+    debugPrint('=== NETWORK REQUEST DEBUG ===');
+    debugPrint('URL: ${uri.toString()}');
+    debugPrint('Full URL: ${uri.scheme}://${uri.host}:${uri.port}${uri.path}');
+    debugPrint('Body: $body');
+
+    try {
+      // Try a simple HTTP GET to check connectivity
+      final testResponse = await http.get(
+        Uri.parse('http://${uri.host}:${uri.port}/'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(Duration(seconds: 5));
+
+      debugPrint(
+          'Connectivity test: SUCCESS (Status: ${testResponse.statusCode})');
+    } catch (e) {
+      debugPrint('Connectivity test: FAILED - $e');
+    }
+
+    debugPrint('=== END DEBUG ===');
+  }
+
   // ======================================================
   // 2️⃣ SEND FIREBASE TOKEN TO BACKEND (Unified Sync)
   // ======================================================
@@ -95,8 +118,7 @@ class AuthProvider with ChangeNotifier {
 
       final response = await http
           .post(
-            // Corrected endpoint mapping: $_baseUrl/firebase/auth/google
-            Uri.parse('$_baseUrl$endpoint'), 
+            Uri.parse('$_baseUrl$endpoint'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'idToken': idToken}),
           )
@@ -104,7 +126,8 @@ class AuthProvider with ChangeNotifier {
 
       if (response.statusCode != 200) {
         final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Backend authentication failed');
+        throw Exception(
+            errorData['message'] ?? 'Backend authentication failed');
       }
 
       final data = jsonDecode(response.body);
@@ -123,66 +146,91 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ======================================================
-  // 3️⃣ PHONE TOKEN EXCHANGE (New: Called AFTER Firebase verifies OTP)
+  // 3️⃣ PHONE TOKEN EXCHANGE (Called AFTER Firebase verifies OTP)
   // ======================================================
-  Future<Map<String, dynamic>> verifyPhoneToken(String idToken) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-      
-      final res = await http
+Future<void> verifyPhoneToken(String idToken) async {
+  try {
+    _isLoading = true;
+    notifyListeners();
+
+    final uri = Uri.parse('$_baseUrl/phone/verify-token');
+    final body = jsonEncode({'idToken': idToken});
+    
+    // Debug the request
+    await _debugNetworkRequest(uri, body.substring(0, 50) + '...');
+
+    final response = await http
         .post(
-          // Matches backend /api/auth/phone/verify-token
-          Uri.parse('$_baseUrl/phone/verify-token'),
+          uri,
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'idToken': idToken}),
+          body: body,
         )
         .timeout(_timeout);
 
-      final data = jsonDecode(res.body);
-      if (res.statusCode != 200) {
-        throw Exception(data['message'] ?? 'Phone token verification failed');
-      }
+    debugPrint('Response status: ${response.statusCode}');
+    debugPrint('Response body: ${response.body}');
 
-      _token = data['token'];
-      _userId = data['user_id']?.toString();
-      _email = data['email'];
-      _username = data['username'];
-      _isAdmin = data['isAdmin'] ?? false;
-
-      await _saveUserData();
-      return data;
-
-    } catch (e) {
-      debugPrint("Phone Sign-In Error: $e");
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    if (response.statusCode != 200) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Phone token verification failed');
     }
+
+    final data = jsonDecode(response.body);
+
+    _token = data['token'];
+    _userId = data['user_id']?.toString();
+    _isAdmin = data['isAdmin'] ?? false;
+    _email = data['email'];
+    _username = data['username'];
+
+    await _saveUserData();
+  } catch (e) {
+    debugPrint("Phone Token Exchange Error: $e");
+    rethrow;
+  } finally {
+    _isLoading = false;
+    notifyListeners();
   }
-
-
+}
   // ======================================================
   // 4️⃣ AUTO LOGIN
   // ======================================================
   Future<bool> tryAutoLogin() async {
     final firebaseUser = _firebaseAuth.currentUser;
 
+    // Try Firebase auto-login first
     if (firebaseUser != null) {
       try {
         _email = firebaseUser.email;
         _username =
             firebaseUser.displayName ?? firebaseUser.email?.split('@')[0];
-        await _syncFirebaseUserWithBackend(firebaseUser, '/firebase/auth/google');
+
+        // Determine which endpoint to use based on provider
+        if (firebaseUser.providerData
+            .any((userInfo) => userInfo.providerId == 'google.com')) {
+          await _syncFirebaseUserWithBackend(
+              firebaseUser, '/firebase/auth/google');
+        } else if (firebaseUser.providerData
+            .any((userInfo) => userInfo.providerId == 'phone')) {
+          // For phone auth, get the token and verify with backend
+          final idToken = await firebaseUser.getIdToken(true);
+          if (idToken != null) {
+            await verifyPhoneToken(idToken);
+          } else {
+            throw Exception("Failed to get ID token for phone user");
+          }
+        }
+
         notifyListeners();
         return true;
-      } catch (_) {
+      } catch (e) {
+        debugPrint("Auto login error: $e");
         await signOut();
         return false;
       }
     }
 
+    // Fall back to local storage
     final prefs = await SharedPreferences.getInstance();
     if (!prefs.containsKey(_userDataKey)) return false;
 

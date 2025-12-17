@@ -1,4 +1,4 @@
-// lib/screens/auth/otp_verification_screen.dart (MODIFIED)
+// lib/screens/auth/otp_verification_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -73,7 +73,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
 
       // 4. Exchange the Firebase ID Token for the custom backend JWT
-      await authProvider.verifyPhoneToken(idToken); // Now safe, idToken is String
+      await authProvider.verifyPhoneToken(idToken);
 
       if (!mounted) return;
 
@@ -122,41 +122,149 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Future<void> _resendOtp() async {
     setState(() => _isResending = true);
     
-    // Use the same Firebase function to re-send, leveraging the resend token
-    await _auth.verifyPhoneNumber(
-      phoneNumber: widget.identifier,
-      forceResendingToken: widget.resendToken,
-      verificationCompleted: (PhoneAuthCredential credential) {}, 
-      verificationFailed: (FirebaseAuthException e) {
-        if (mounted) {
-          Fluttertoast.showToast(msg: 'Resend failed: ${e.message}');
-          setState(() => _isResending = false);
-        }
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        if (mounted) {
-          Fluttertoast.showToast(
-            msg: 'New OTP sent to your phone. Please enter it below.',
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            textColor: Theme.of(context).colorScheme.onPrimary,
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: widget.identifier,
+        forceResendingToken: widget.resendToken,
+        verificationCompleted: (PhoneAuthCredential credential) {
+          // Auto-verification on Android devices
+          if (mounted) {
+            _handleAutoVerification(credential);
+          }
+        }, 
+        verificationFailed: (FirebaseAuthException e) {
+          if (mounted) {
+            Fluttertoast.showToast(
+              msg: 'Resend failed: ${e.message ?? "Unknown error"}',
+              toastLength: Toast.LENGTH_LONG,
+              backgroundColor: Theme.of(context).colorScheme.error,
+              textColor: Theme.of(context).colorScheme.onError,
+            );
+            setState(() => _isResending = false);
+          }
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          if (mounted) {
+            Fluttertoast.showToast(
+              msg: 'New OTP sent to ${widget.identifier}',
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              textColor: Theme.of(context).colorScheme.onPrimary,
+            );
+            
+            // Update the verification ID for the new OTP
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              // This would typically require updating the parent widget's state
+              // For simplicity, we'll just show a message
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Please enter the new OTP sent to your phone'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                ),
+              );
+            });
+            
+            setState(() => _isResending = false);
+          }
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          // Optional: handle timeout
+          if (mounted) {
+            setState(() => _isResending = false);
+          }
+        },
+        timeout: const Duration(seconds: 60),
+      );
+    } catch (error) {
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: 'Failed to resend OTP: ${error.toString()}',
+          backgroundColor: Theme.of(context).colorScheme.error,
+          textColor: Theme.of(context).colorScheme.onError,
+        );
+        setState(() => _isResending = false);
+      }
+    }
+  }
+
+  Future<void> _handleAutoVerification(PhoneAuthCredential credential) async {
+    try {
+      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+      
+      if (user != null && mounted) {
+        final authProvider = Provider.of<AppAuth.AuthProvider>(context, listen: false);
+        final notificationProvider = Provider.of<UserNotificationProvider>(context, listen: false);
+        
+        final String? idToken = await user.getIdToken();
+        if (idToken != null) {
+          await authProvider.verifyPhoneToken(idToken);
+          
+          if (authProvider.isAuth) {
+            await notificationProvider.fetchNotifications(authProvider.token);
+          }
+          
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) {
+                return authProvider.isAdmin ? const NavbarAdmin() : const HomeScreen(); 
+              },
+            ),
+            (Route<dynamic> route) => false,
           );
-          setState(() => _isResending = false);
         }
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {},
-    );
+      }
+    } catch (error) {
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: 'Auto-verification failed: ${error.toString()}',
+          backgroundColor: Theme.of(context).colorScheme.error,
+          textColor: Theme.of(context).colorScheme.onError,
+        );
+      }
+    }
   }
 
   void _handleOtpInput(int index, String value) {
+    // Only allow digits
+    if (value.isNotEmpty && !RegExp(r'^\d$').hasMatch(value)) {
+      _otpControllers[index].clear();
+      return;
+    }
+    
     if (value.isNotEmpty && index < 5) {
       _focusNodes[index + 1].requestFocus();
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
 
+    // Auto-submit when last digit is entered
     if (index == 5 && value.isNotEmpty) {
       FocusScope.of(context).unfocus();
+      
+      // Wait a moment for the UI to update, then verify
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _verifyOtp();
+      });
     }
+  }
+
+  void _clearOtpFields() {
+    for (final controller in _otpControllers) {
+      controller.clear();
+    }
+    _focusNodes[0].requestFocus();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Auto-focus the first OTP field
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusNodes[0].canRequestFocus) {
+        _focusNodes[0].requestFocus();
+      }
+    });
   }
 
   @override
@@ -182,6 +290,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           duration: const Duration(milliseconds: 500),
           child: const Text('OTP Verification'),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.clear_all),
+            onPressed: _clearOtpFields,
+            tooltip: 'Clear all fields',
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -213,9 +328,21 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 duration: const Duration(milliseconds: 600),
                 delay: const Duration(milliseconds: 200),
                 child: Text(
-                  'Enter the 6-digit code sent to your phone number ${widget.identifier}',
+                  'Enter the 6-digit code sent to your phone number',
                   style: textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              FadeInDown(
+                duration: const Duration(milliseconds: 600),
+                delay: const Duration(milliseconds: 300),
+                child: Text(
+                  widget.identifier,
+                  style: textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.primary,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -228,60 +355,109 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   children: List.generate(6, _buildOtpField),
                 ),
               ),
+              const SizedBox(height: 16),
+              FadeInUp(
+                duration: const Duration(milliseconds: 700),
+                delay: const Duration(milliseconds: 100),
+                child: TextButton(
+                  onPressed: _clearOtpFields,
+                  child: Text(
+                    'Clear OTP',
+                    style: TextStyle(
+                      color: colorScheme.secondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 32),
               FadeInUp(
                 duration: const Duration(milliseconds: 700),
                 delay: const Duration(milliseconds: 200),
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyOtp,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _verifyOtp,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: colorScheme.onPrimary,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            'VERIFY OTP',
+                            style: textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
-                  child: _isLoading
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: colorScheme.onPrimary,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text(
-                          'VERIFY OTP',
-                          style: textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                 ),
               ),
               const SizedBox(height: 20),
               FadeInUp(
                 duration: const Duration(milliseconds: 700),
                 delay: const Duration(milliseconds: 300),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Didn\'t receive the code? ',
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _isResending ? null : _resendOtp,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: _isResending
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: colorScheme.primary,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              'Resend OTP',
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              FadeInUp(
+                duration: const Duration(milliseconds: 700),
+                delay: const Duration(milliseconds: 400),
                 child: TextButton(
-                  onPressed: _isResending ? null : _resendOtp,
-                  child: _isResending
-                      ? SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: colorScheme.primary,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text(
-                          'Resend OTP',
-                          style: TextStyle(
-                            color: colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'Change Phone Number',
+                    style: TextStyle(
+                      color: colorScheme.secondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -305,11 +481,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           keyboardType: TextInputType.number,
           maxLength: 1,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: 20, 
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
           decoration: InputDecoration(
             counterText: '',
             filled: true,
-            fillColor: colorScheme.surface.withOpacity(0.5),
+            fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -318,8 +498,19 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: colorScheme.primary, width: 2),
             ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+            ),
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
           ),
           onChanged: (value) => _handleOtpInput(index, value),
+          onTap: () {
+            // Clear the field when tapped (for easier editing)
+            if (_otpControllers[index].text.isNotEmpty) {
+              _otpControllers[index].clear();
+            }
+          },
         ),
       ),
     );

@@ -3,31 +3,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
+import 'package:mensurationhealthapp/screens/auth/phone_login_screen.dart';
+import 'package:provider/provider.dart';
+
+import 'firebase_options.dart'; // ✅ ADD THIS
+
 import 'package:mensurationhealthapp/providers/admin_notification_provider.dart';
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
-import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart';
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
 import 'package:mensurationhealthapp/providers/profile_provider.dart';
+import 'package:mensurationhealthapp/providers/user_provider.dart';
+
+import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart';
 import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
 import 'package:mensurationhealthapp/screens/auth/signup_screen.dart';
 import 'package:mensurationhealthapp/screens/home/HomeScreen.dart';
 import 'package:mensurationhealthapp/screens/home/profile.dart';
 import 'package:mensurationhealthapp/screens/splash_screen.dart';
-import 'package:provider/provider.dart';
+
 import 'app_theme.dart';
-import 'package:mensurationhealthapp/providers/user_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Set preferred orientations
+
+  // Lock orientation
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
+  // ✅ FIXED Firebase init
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   runApp(const MyApp());
 }
@@ -52,11 +61,12 @@ class MyApp extends StatelessWidget {
         darkTheme: AppTheme.darkTheme,
         home: const SplashScreen(),
         routes: {
-          '/login': (context) => const FirebaseLoginScreen(), // Changed from LoginScreen to FirebaseLoginScreen
+          '/login': (context) => const FirebaseLoginScreen(),
           '/signup': (context) => const SignupScreen(),
           '/home': (context) => const HomeScreen(),
           '/profile': (context) => const ProfilePage(),
           '/admin': (context) => const NavbarAdmin(),
+          '/phone': (context) => const PhoneLoginScreen(),
         },
         builder: (context, child) {
           return MediaQuery(
