@@ -600,7 +600,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     TextButton(
                       onPressed: () {
                         Navigator.of(context).pop();
-                        context.read<AuthProvider>().logout();
+                        context.read<AuthProvider>().signOut();
                       },
                       child: const Text('Logout'),
                     ),

@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
-import 'package:mensurationhealthapp/screens/auth/phone_login_screen.dart'; 
+import 'package:mensurationhealthapp/screens/auth/phone_login_screen.dart';
 import 'package:mensurationhealthapp/screens/home/homescreen.dart';
 
 // Renamed from LoginScreen to FirebaseLoginScreen to reflect the new primary auth methods
@@ -44,7 +44,7 @@ class _FirebaseLoginScreenState extends State<FirebaseLoginScreen> {
 
       if (mounted) {
         Fluttertoast.showToast(msg: 'Signed in with Google successfully');
-        
+
         if (authProvider.isAuth) {
           await notificationProvider.fetchNotifications(authProvider.token);
         }
@@ -53,7 +53,9 @@ class _FirebaseLoginScreenState extends State<FirebaseLoginScreen> {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (context) {
-              return authProvider.isAdmin ? const NavbarAdmin() : const HomeScreen(); 
+              return authProvider.isAdmin
+                  ? const NavbarAdmin()
+                  : const HomeScreen();
             },
           ),
           (Route<dynamic> route) => false,
@@ -83,9 +85,9 @@ class _FirebaseLoginScreenState extends State<FirebaseLoginScreen> {
       // await authProvider.signInWithApple(); // Call the placeholder/actual method
 
       // Temporarily mock success/error since the method is a placeholder
-      await Future.delayed(const Duration(milliseconds: 500)); 
-      throw Exception('Apple Sign-in is currently disabled in this environment.');
-
+      await Future.delayed(const Duration(milliseconds: 500));
+      throw Exception(
+          'Apple Sign-in is currently disabled in this environment.');
     } catch (error) {
       if (mounted) {
         Fluttertoast.showToast(
@@ -164,7 +166,7 @@ class _FirebaseLoginScreenState extends State<FirebaseLoginScreen> {
                   isLoading: _isLoadingGoogle,
                   text: 'Sign in with Google',
                   // Ensure this path is correct or replace with a network image/icon
-                  icon: Image.asset('assets/images/google_logo.png', height: 24), 
+                  icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 28),
                   onPressed: _handleGoogleSignIn,
                   backgroundColor: colorScheme.surface,
                   foregroundColor: colorScheme.onSurface,
@@ -187,32 +189,7 @@ class _FirebaseLoginScreenState extends State<FirebaseLoginScreen> {
               ),
               const SizedBox(height: 20),
 
-              // 3. Divider
-              FadeInUp(
-                duration: const Duration(milliseconds: 700),
-                delay: const Duration(milliseconds: 500),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Divider(
-                        color: colorScheme.onSurface.withOpacity(0.3),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('OR', style: textTheme.bodySmall),
-                    ),
-                    Expanded(
-                      child: Divider(
-                        color: colorScheme.onSurface.withOpacity(0.3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // 4. Sign in with Phone
+              // 3. Sign in with Phone
               FadeInUp(
                 duration: const Duration(milliseconds: 700),
                 delay: const Duration(milliseconds: 600),
@@ -236,27 +213,8 @@ class _FirebaseLoginScreenState extends State<FirebaseLoginScreen> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
-              // 5. Placeholder for Forgot Password (kept for old accounts/admin password reset flow)
-              FadeInUp(
-                duration: const Duration(milliseconds: 700),
-                delay: const Duration(milliseconds: 700),
-                child: TextButton(
-                  onPressed: () => Navigator.pushNamed(
-                    context,
-                    '/forgotpassword', 
-                  ),
-                  child: Text(
-                    'Using old password or need to reset?',
-                    style: TextStyle(
-                      color: colorScheme.secondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),

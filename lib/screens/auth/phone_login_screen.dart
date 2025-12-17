@@ -1,10 +1,9 @@
-// lib/screens/auth/phone_login_screen.dart
+// anujsmit/mensuration_tracker_front/mensuration_tracker_front-f791c10d8517a5f857299bbd66976c42835a8ba8a/lib/screens/auth/phone_login_screen.dart (MODIFIED)
 
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 import 'package:animate_do/animate_do.dart';
-import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 
@@ -17,43 +16,65 @@ class PhoneLoginScreen extends StatefulWidget {
 
 class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  String _phoneNumber = '';
   String _fullPhoneNumber = '';
   bool _isLoading = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<void> _requestOtp() async {
+  Future<void> _verifyPhoneNumber() async { // Renamed from _requestOtp
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
     setState(() => _isLoading = true);
 
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-      // Call the backend API to request OTP
-      final response = await authProvider.requestPhoneOtp(_fullPhoneNumber);
-
-      if (mounted) {
-        Fluttertoast.showToast(
-          msg: response['message'] ?? 'OTP requested successfully.',
-          toastLength: Toast.LENGTH_LONG,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          textColor: Theme.of(context).colorScheme.onPrimary,
-        );
-        
-        // Navigate to OTP verification screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (ctx) => OtpVerificationScreen(
-              identifier: _fullPhoneNumber, // Use full phone number as identifier
-              isLogin: true,
-              isPhone: true, // New flag to indicate phone OTP flow
-              userId: response['user_id']?.toString(),
-            ),
-          ),
-        );
-      }
+      await _auth.verifyPhoneNumber(
+        phoneNumber: _fullPhoneNumber,
+        timeout: const Duration(seconds: 60),
+        // Handles OTP auto-retrieval
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          // This block is for auto-verification on Android; skip OTP screen.
+          // In a real application, you'd complete the sign-in and then call the backend token exchange here.
+          // For simplicity in this demo, we handle the manual code sent case.
+        },
+        // Handles failure
+        verificationFailed: (FirebaseAuthException e) {
+          if (mounted) {
+            Fluttertoast.showToast(
+              msg: e.message ?? 'Phone verification failed.',
+              toastLength: Toast.LENGTH_LONG,
+              backgroundColor: Theme.of(context).colorScheme.error,
+              textColor: Theme.of(context).colorScheme.onError,
+            );
+            setState(() => _isLoading = false);
+          }
+        },
+        // Handles code being sent; navigate to OTP screen
+        codeSent: (String verificationId, int? resendToken) {
+          if (mounted) {
+            Fluttertoast.showToast(
+              msg: 'OTP sent to $_fullPhoneNumber',
+              toastLength: Toast.LENGTH_LONG,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              textColor: Theme.of(context).colorScheme.onPrimary,
+            );
+            
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (ctx) => OtpVerificationScreen(
+                  identifier: _fullPhoneNumber,
+                  verificationId: verificationId,
+                  resendToken: resendToken,
+                ),
+              ),
+            );
+            setState(() => _isLoading = false);
+          }
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          // Optional: handle timeout
+        },
+      );
     } catch (error) {
       if (mounted) {
         Fluttertoast.showToast(
@@ -64,9 +85,8 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
           textColor: Theme.of(context).colorScheme.onError,
         );
       }
-    } finally {
       if (mounted) setState(() => _isLoading = false);
-    }
+    } 
   }
 
   @override
@@ -133,11 +153,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                     initialCountryCode: 'US',
                     keyboardType: TextInputType.phone,
                     onChanged: (phone) {
-                      _phoneNumber = phone.number;
                       _fullPhoneNumber = phone.completeNumber;
                     },
                     validator: (value) {
-                      // FIX: value is a PhoneNumber object, check its number property
                       if (value == null || value.number.isEmpty) { 
                         return 'Please enter your phone number';
                       }
@@ -153,7 +171,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                   duration: const Duration(milliseconds: 700),
                   delay: const Duration(milliseconds: 450),
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _requestOtp,
+                    onPressed: _isLoading ? null : _verifyPhoneNumber,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: colorScheme.primary,

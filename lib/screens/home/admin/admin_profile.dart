@@ -215,7 +215,7 @@ class AdminProfile extends StatelessWidget {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                authProvider.logout();
+                authProvider.signOut();
               },
               child: Text(
                 'Logout',

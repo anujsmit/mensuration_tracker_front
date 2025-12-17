@@ -1,3 +1,4 @@
+// anujsmit/mensuration_tracker_front/mensuration_tracker_front-f791c10d8517a5f857299bbd66976c42835a8ba8a/lib/providers/auth_provider.dart (MODIFIED)
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,9 +20,7 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
 
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   // =========================
   // GETTERS
@@ -44,7 +43,7 @@ class AuthProvider with ChangeNotifier {
   static const Duration _timeout = Duration(seconds: 30);
 
   // ======================================================
-  // 1️⃣ GOOGLE SIGN-IN (FIXED FOR google_sign_in 7.x)
+  // 1️⃣ GOOGLE SIGN-IN 
   // ======================================================
   Future<UserCredential?> signInWithGoogle() async {
     try {
@@ -75,7 +74,7 @@ class AuthProvider with ChangeNotifier {
       _email = user.email;
       _username = user.displayName ?? user.email?.split('@')[0];
 
-      await _syncFirebaseUserWithBackend(user);
+      await _syncFirebaseUserWithBackend(user, '/firebase/auth/google');
 
       return userCredential;
     } catch (e) {
@@ -88,22 +87,24 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ======================================================
-  // 2️⃣ SEND FIREBASE TOKEN TO BACKEND
+  // 2️⃣ SEND FIREBASE TOKEN TO BACKEND (Unified Sync)
   // ======================================================
-  Future<void> _syncFirebaseUserWithBackend(User user) async {
+  Future<void> _syncFirebaseUserWithBackend(User user, String endpoint) async {
     try {
       final idToken = await user.getIdToken(true);
 
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/auth/google'),
+            // Corrected endpoint mapping: $_baseUrl/firebase/auth/google
+            Uri.parse('$_baseUrl$endpoint'), 
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'idToken': idToken}),
           )
           .timeout(_timeout);
 
       if (response.statusCode != 200) {
-        throw Exception('Backend authentication failed');
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Backend authentication failed');
       }
 
       final data = jsonDecode(response.body);
@@ -111,6 +112,8 @@ class AuthProvider with ChangeNotifier {
       _token = data['token'];
       _userId = data['user_id']?.toString();
       _isAdmin = data['isAdmin'] ?? false;
+      _email = data['email'] ?? user.email;
+      _username = data['username'] ?? user.displayName;
 
       await _saveUserData();
     } catch (e) {
@@ -120,7 +123,48 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ======================================================
-  // 3️⃣ AUTO LOGIN
+  // 3️⃣ PHONE TOKEN EXCHANGE (New: Called AFTER Firebase verifies OTP)
+  // ======================================================
+  Future<Map<String, dynamic>> verifyPhoneToken(String idToken) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      
+      final res = await http
+        .post(
+          // Matches backend /api/auth/phone/verify-token
+          Uri.parse('$_baseUrl/phone/verify-token'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'idToken': idToken}),
+        )
+        .timeout(_timeout);
+
+      final data = jsonDecode(res.body);
+      if (res.statusCode != 200) {
+        throw Exception(data['message'] ?? 'Phone token verification failed');
+      }
+
+      _token = data['token'];
+      _userId = data['user_id']?.toString();
+      _email = data['email'];
+      _username = data['username'];
+      _isAdmin = data['isAdmin'] ?? false;
+
+      await _saveUserData();
+      return data;
+
+    } catch (e) {
+      debugPrint("Phone Sign-In Error: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
+  // ======================================================
+  // 4️⃣ AUTO LOGIN
   // ======================================================
   Future<bool> tryAutoLogin() async {
     final firebaseUser = _firebaseAuth.currentUser;
@@ -130,7 +174,7 @@ class AuthProvider with ChangeNotifier {
         _email = firebaseUser.email;
         _username =
             firebaseUser.displayName ?? firebaseUser.email?.split('@')[0];
-        await _syncFirebaseUserWithBackend(firebaseUser);
+        await _syncFirebaseUserWithBackend(firebaseUser, '/firebase/auth/google');
         notifyListeners();
         return true;
       } catch (_) {
@@ -160,7 +204,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ======================================================
-  // 4️⃣ SIGN OUT
+  // 5️⃣ SIGN OUT
   // ======================================================
   Future<void> signOut() async {
     await _googleSignIn.signOut();
@@ -179,86 +223,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ======================================================
-  // 5️⃣ PHONE OTP
-  // ======================================================
-  Future<Map<String, dynamic>> requestPhoneOtp(String phone) async {
-    final res = await http
-        .post(
-          Uri.parse('$_baseUrl/phone/request-otp'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'phoneNumber': phone}),
-        )
-        .timeout(_timeout);
-
-    final data = jsonDecode(res.body);
-    if (res.statusCode != 200) {
-      throw Exception(data['message'] ?? 'OTP request failed');
-    }
-    return data;
-  }
-
-  Future<Map<String, dynamic>> verifyPhoneOtp(
-      String phone, String otp) async {
-    final res = await http
-        .post(
-          Uri.parse('$_baseUrl/phone/verify-otp'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'phoneNumber': phone, 'otp': otp}),
-        )
-        .timeout(_timeout);
-
-    final data = jsonDecode(res.body);
-    if (res.statusCode != 200) {
-      throw Exception(data['message'] ?? 'OTP verification failed');
-    }
-
-    _token = data['token'];
-    _userId = data['user_id']?.toString();
-    _email = data['email'];
-    _username = data['username'];
-    _isAdmin = data['isAdmin'] ?? false;
-
-    await _saveUserData();
-    notifyListeners();
-    return data;
-  }
-
-  // ======================================================
-  // 6️⃣ EMAIL OTP
-  // ======================================================
-  Future<Map<String, dynamic>> verifyOtp(
-      String email, String otp) async {
-    final res = await http
-        .post(
-          Uri.parse('$_baseUrl/verify-otp'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'email': email, 'otp': otp}),
-        )
-        .timeout(_timeout);
-
-    final data = jsonDecode(res.body);
-    if (res.statusCode != 200) {
-      throw Exception(data['message'] ?? 'OTP failed');
-    }
-    return data;
-  }
-
-  Future<void> resendOtp(String email) async {
-    final res = await http
-        .post(
-          Uri.parse('$_baseUrl/resend-otp'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'email': email}),
-        )
-        .timeout(_timeout);
-
-    if (res.statusCode != 200) {
-      throw Exception('Failed to resend OTP');
-    }
-  }
-
-  // ======================================================
-  // 7️⃣ LOCAL STORAGE
+  // 6️⃣ LOCAL STORAGE
   // ======================================================
   Future<void> _saveUserData() async {
     final prefs = await SharedPreferences.getInstance();

@@ -1,28 +1,27 @@
-// lib/screens/auth/otp_verification_screen.dart
+// lib/screens/auth/otp_verification_screen.dart (MODIFIED)
 
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart'; // NEW: Import NavbarAdmin
-import 'package:mensurationhealthapp/screens/auth/login_screen.dart'; // Import FirebaseLoginScreen (renamed class in that file)
+import 'package:firebase_auth/firebase_auth.dart'; 
+import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart'; 
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
-import 'package:mensurationhealthapp/providers/auth_provider.dart';
+// FIX: Alias to resolve the name collision with firebase_auth_platform_interface.
+import 'package:mensurationhealthapp/providers/auth_provider.dart' as AppAuth; 
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
 import 'package:mensurationhealthapp/screens/home/homescreen.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
-  final String identifier; // Can be email or phone number
-  final bool isLogin;
-  final bool isPhone; // NEW: Flag to distinguish between email and phone OTP flow
-  final String? userId;
+  final String identifier; // Phone number
+  final String verificationId; // Firebase verification ID
+  final int? resendToken;
 
   const OtpVerificationScreen({
     Key? key,
     required this.identifier,
-    required this.isLogin,
-    this.isPhone = false, // Default to false (email flow for password reset)
-    this.userId,
-  }) : super(key: key);
+    required this.verificationId,
+    this.resendToken,
+  }) : super(key: key); 
 
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
@@ -35,6 +34,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   bool _isLoading = false;
   bool _isResending = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   Future<void> _verifyOtp() async {
     final otp = _otpControllers.map((c) => c.text.trim()).join();
@@ -46,47 +46,65 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      // FIX: Use the alias (AppAuth) for the custom AuthProvider
+      final authProvider = Provider.of<AppAuth.AuthProvider>(context, listen: false);
       final notificationProvider = Provider.of<UserNotificationProvider>(context, listen: false);
+      
+      // 1. Create a PhoneAuthCredential using the Firebase verificationId and the entered OTP
+      final PhoneAuthCredential credential = PhoneAuthProvider.credential(
+        verificationId: widget.verificationId,
+        smsCode: otp,
+      );
+      
+      // 2. Sign in to Firebase with the credential
+      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
 
-      if (widget.isPhone) {
-        // Phone number verification (new sign-in flow)
-        await authProvider.verifyPhoneOtp(widget.identifier, otp);
-      } else {
-        // Email verification (old flow, likely only for password reset now)
-        await authProvider.verifyOtp(widget.identifier, otp);
+      if (user == null) {
+          throw Exception("Firebase sign-in failed after OTP verification.");
       }
+
+      // 3. Get the Firebase ID Token (Returns String?)
+      final String? idToken = await user.getIdToken();
+      
+      // FIX: Null safety check added here to handle String?
+      if (idToken == null) {
+          throw Exception("Failed to retrieve Firebase ID Token after successful login.");
+      }
+
+      // 4. Exchange the Firebase ID Token for the custom backend JWT
+      await authProvider.verifyPhoneToken(idToken); // Now safe, idToken is String
 
       if (!mounted) return;
 
-      Fluttertoast.showToast(msg: 'OTP verified successfully');
+      Fluttertoast.showToast(msg: 'Sign in successful');
 
       // Load notifications after successful verification/login
       if (authProvider.isAuth) {
         await notificationProvider.fetchNotifications(authProvider.token);
       }
 
-      // Handle navigation based on the flow
-      if (widget.isPhone || widget.isLogin) {
-        // If phone login or old email login, navigate to home/admin
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) {
-              // FIX: Use NavbarAdmin, as defined in main.dart's routes
-              return authProvider.isAdmin ? const NavbarAdmin() : const HomeScreen(); 
-            },
-          ),
-          (Route<dynamic> route) => false,
-        );
-      } else {
-        // If email signup (now removed, but kept for old code), navigate to the new login gateway
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) => const FirebaseLoginScreen(), // Use new class name
-          ),
-          (Route<dynamic> route) => false,
-        );
-      }
+      // Navigate to home/admin
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) {
+            return authProvider.isAdmin ? const NavbarAdmin() : const HomeScreen(); 
+          },
+        ),
+        (Route<dynamic> route) => false,
+      );
+
+    } on FirebaseAuthException catch (e) {
+        if (mounted) {
+            Fluttertoast.showToast(
+                msg: e.code == 'invalid-verification-code' 
+                    ? 'Invalid OTP. Please try again.' 
+                    : e.message ?? 'Verification failed.',
+                toastLength: Toast.LENGTH_LONG,
+                backgroundColor: Theme.of(context).colorScheme.error,
+                textColor: Theme.of(context).colorScheme.onError,
+            );
+        }
     } catch (error) {
       if (mounted) {
         Fluttertoast.showToast(
@@ -103,34 +121,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   Future<void> _resendOtp() async {
     setState(() => _isResending = true);
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
-      if (widget.isPhone) {
-        // Resend phone OTP
-        await authProvider.requestPhoneOtp(widget.identifier);
-      } else {
-        // Resend email OTP (for password reset)
-        await authProvider.resendOtp(widget.identifier);
-      }
-
-      if (!mounted) return;
-      Fluttertoast.showToast(
-        msg: 'New OTP sent to your ${widget.isPhone ? 'phone' : 'email'}',
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        textColor: Theme.of(context).colorScheme.onPrimary,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      Fluttertoast.showToast(
-        msg: 'Failed to resend OTP. Please try again.',
-        toastLength: Toast.LENGTH_LONG,
-        backgroundColor: Theme.of(context).colorScheme.error,
-        textColor: Theme.of(context).colorScheme.onError,
-      );
-    } finally {
-      if (mounted) setState(() => _isResending = false);
-    }
+    
+    // Use the same Firebase function to re-send, leveraging the resend token
+    await _auth.verifyPhoneNumber(
+      phoneNumber: widget.identifier,
+      forceResendingToken: widget.resendToken,
+      verificationCompleted: (PhoneAuthCredential credential) {}, 
+      verificationFailed: (FirebaseAuthException e) {
+        if (mounted) {
+          Fluttertoast.showToast(msg: 'Resend failed: ${e.message}');
+          setState(() => _isResending = false);
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (mounted) {
+          Fluttertoast.showToast(
+            msg: 'New OTP sent to your phone. Please enter it below.',
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            textColor: Theme.of(context).colorScheme.onPrimary,
+          );
+          setState(() => _isResending = false);
+        }
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {},
+    );
   }
 
   void _handleOtpInput(int index, String value) {
@@ -142,7 +156,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     if (index == 5 && value.isNotEmpty) {
       FocusScope.of(context).unfocus();
-      _verifyOtp();
     }
   }
 
@@ -162,8 +175,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-
-    String identifierType = widget.isPhone ? 'phone number' : 'email';
 
     return Scaffold(
       appBar: AppBar(
@@ -202,7 +213,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 duration: const Duration(milliseconds: 600),
                 delay: const Duration(milliseconds: 200),
                 child: Text(
-                  'Enter the OTP sent to your $identifierType ${widget.identifier}',
+                  'Enter the 6-digit code sent to your phone number ${widget.identifier}',
                   style: textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurface.withOpacity(0.7),
                   ),
