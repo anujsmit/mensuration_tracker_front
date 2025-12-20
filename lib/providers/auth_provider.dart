@@ -21,7 +21,6 @@ class AuthProvider with ChangeNotifier {
 
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
-
   // =========================
   // GETTERS
   // =========================
@@ -148,50 +147,52 @@ class AuthProvider with ChangeNotifier {
   // ======================================================
   // 3️⃣ PHONE TOKEN EXCHANGE (Called AFTER Firebase verifies OTP)
   // ======================================================
-Future<void> verifyPhoneToken(String idToken) async {
-  try {
-    _isLoading = true;
-    notifyListeners();
+  Future<void> verifyPhoneToken(String idToken) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
 
-    final uri = Uri.parse('$_baseUrl/phone/verify-token');
-    final body = jsonEncode({'idToken': idToken});
-    
-    // Debug the request
-    await _debugNetworkRequest(uri, body.substring(0, 50) + '...');
+      final uri = Uri.parse('$_baseUrl/phone/verify-token');
+      final body = jsonEncode({'idToken': idToken});
 
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: body,
-        )
-        .timeout(_timeout);
+      // Debug the request
+      await _debugNetworkRequest(uri, body.substring(0, 50) + '...');
 
-    debugPrint('Response status: ${response.statusCode}');
-    debugPrint('Response body: ${response.body}');
+      final response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(_timeout);
 
-    if (response.statusCode != 200) {
-      final errorData = jsonDecode(response.body);
-      throw Exception(errorData['message'] ?? 'Phone token verification failed');
+      debugPrint('Response status: ${response.statusCode}');
+      debugPrint('Response body: ${response.body}');
+
+      if (response.statusCode != 200) {
+        final errorData = jsonDecode(response.body);
+        throw Exception(
+            errorData['message'] ?? 'Phone token verification failed');
+      }
+
+      final data = jsonDecode(response.body);
+
+      _token = data['token'];
+      _userId = data['user_id']?.toString();
+      _isAdmin = data['isAdmin'] ?? false;
+      _email = data['email'];
+      _username = data['username'];
+
+      await _saveUserData();
+    } catch (e) {
+      debugPrint("Phone Token Exchange Error: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    final data = jsonDecode(response.body);
-
-    _token = data['token'];
-    _userId = data['user_id']?.toString();
-    _isAdmin = data['isAdmin'] ?? false;
-    _email = data['email'];
-    _username = data['username'];
-
-    await _saveUserData();
-  } catch (e) {
-    debugPrint("Phone Token Exchange Error: $e");
-    rethrow;
-  } finally {
-    _isLoading = false;
-    notifyListeners();
   }
-}
+
   // ======================================================
   // 4️⃣ AUTO LOGIN
   // ======================================================
