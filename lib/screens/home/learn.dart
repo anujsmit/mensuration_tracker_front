@@ -29,24 +29,42 @@ class _LearnPageState extends State<LearnPage>
   }
 
   void _initYoutubePlayer() {
-    final videoId = YoutubePlayer.convertUrlToId(
-          'https://www.youtube.com/watch?v=JMeKBKe2NVw',
-        ) ??
-        'JMeKBKe2NVw';
+    try {
+      final videoId = YoutubePlayer.convertUrlToId(
+            'https://www.youtube.com/watch?v=JMeKBKe2NVw',
+          ) ??
+          'JMeKBKe2NVw';
 
-    _youtubeController = YoutubePlayerController(
-      initialVideoId: videoId,
-      flags: const YoutubePlayerFlags(
-        autoPlay: false,
-        mute: false,
-        disableDragSeek: false,
-        loop: false,
-        isLive: false,
-        enableCaption: true,
-        hideControls: false,
-        hideThumbnail: false,
-      ),
-    );
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          mute: false,
+          disableDragSeek: false,
+          loop: false,
+          isLive: false,
+          enableCaption: true,
+          hideControls: false,
+          hideThumbnail: false,
+        ),
+      );
+    } catch (e) {
+      print('Error initializing YouTube player: $e');
+      // Fallback to a default video ID if conversion fails
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: 'JMeKBKe2NVw',
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          mute: false,
+          disableDragSeek: false,
+          loop: false,
+          isLive: false,
+          enableCaption: true,
+          hideControls: false,
+          hideThumbnail: false,
+        ),
+      );
+    }
   }
 
   @override
@@ -291,7 +309,7 @@ class _LearnPageState extends State<LearnPage>
                           ),
                           onReady: () {
                             setState(() => _isPlayerReady = true);
-                          }
+                          },
                         )
                       : Container(
                           height: 200,

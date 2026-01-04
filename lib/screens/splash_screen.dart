@@ -9,15 +9,34 @@ class SplashScreen extends StatefulWidget {
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    
+    // Smooth fade-in animation for the logo
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+    _controller.forward();
+
     _navigateToNextScreen();
   }
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   Future<void> _navigateToNextScreen() async {
-    await Future.delayed(const Duration(seconds: 2));
+    // Wait for data and animation
+    await Future.delayed(const Duration(seconds: 3));
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final isLoggedIn = await authProvider.tryAutoLogin();
@@ -30,10 +49,7 @@ class _SplashScreenState extends State<SplashScreen> {
         authProvider.isAdmin ? '/admin' : '/home',
       );
     } else {
-      Navigator.pushReplacementNamed(
-        context,
-        '/login',
-      );
+      Navigator.pushReplacementNamed(context, '/login');
     }
   }
 
@@ -42,22 +58,75 @@ class _SplashScreenState extends State<SplashScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/images/app_logo.png', height: 150),
-            const SizedBox(height: 20),
-            Text(
-              'Menstrual Health App',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                color: theme.colorScheme.primary,
+      body: Container(
+        width: double.infinity,
+        // Using a subtle gradient makes the splash screen feel less "flat"
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.colorScheme.surface,
+              theme.colorScheme.primaryContainer.withOpacity(0.2),
+            ],
+          ),
+        ),
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.network(
+                  'https://m.media-amazon.com/images/I/512kKjY6ETL.png',
+                  height: 180,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      height: 150,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => 
+                    const Icon(Icons.health_and_safety, size: 100, color: Colors.red),
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            CircularProgressIndicator(color: theme.colorScheme.primary),
-          ],
+              const SizedBox(height: 30),
+              Text(
+                'Mensuration health app',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your Health, Every Day',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 60),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 100),
+                child: LinearProgressIndicator(
+                  backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  minHeight: 4,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
