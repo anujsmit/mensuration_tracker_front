@@ -110,89 +110,89 @@ class ProfileProvider with ChangeNotifier {
     }
   }
 
-  // NEW: Method to download the health report
-  Future<Map<String, dynamic>> downloadHealthReport(String token) async {
-    try {
-      final reportUrl = Uri.parse('$baseUrl/report'); 
+// NEW: Method to download the health report
+Future<Map<String, dynamic>> downloadHealthReport(String token) async {
+  try {
+    // FIX: Use the correct reports endpoint instead of profile endpoint
+    final reportUrl = Uri.parse('${Config.apiAuthBaseUrl}/reports/health'); 
 
-      final response = await http.get(
-        reportUrl,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'text/csv, application/json',
-        },
-      ).timeout(const Duration(seconds: 60)); 
+    final response = await http.get(
+      reportUrl,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'text/csv, application/json',
+      },
+    ).timeout(const Duration(seconds: 60)); 
 
-      if (response.statusCode == 200) {
-        // Check content type
-        final contentType = response.headers['content-type'] ?? '';
-        
-        // Extract filename from the Content-Disposition header
-        String? contentDisposition = response.headers['content-disposition'];
-        String filename = 'health_report.csv';
-        if (contentDisposition != null) {
-            // Simple parsing to get the filename
-            final match = RegExp(r'filename="?([^"]+)"?').firstMatch(contentDisposition);
-            if (match != null) {
-                filename = match.group(1) ?? filename;
-            }
+    if (response.statusCode == 200) {
+      // Check content type
+      final contentType = response.headers['content-type'] ?? '';
+      
+      // Extract filename from the Content-Disposition header
+      String? contentDisposition = response.headers['content-disposition'];
+      String filename = 'health_report.csv';
+      if (contentDisposition != null) {
+        // Simple parsing to get the filename
+        final match = RegExp(r'filename="?([^"]+)"?').firstMatch(contentDisposition);
+        if (match != null) {
+          filename = match.group(1) ?? filename;
         }
-        
-        // Handle both CSV and JSON responses
-        if (contentType.contains('csv')) {
-          return {
-            'success': true,
-            'data': response.bodyBytes, 
-            'filename': filename,
-            'contentType': 'csv',
-          };
-        } else {
-          // Try to parse as JSON
-          try {
-            final responseData = json.decode(response.body);
-            if (responseData['success'] == false) {
-              return {
-                'success': false,
-                'message': responseData['message'] ?? 'Failed to generate report.',
-              };
-            }
-            return {
-              'success': true,
-              'data': Uint8List.fromList(utf8.encode(response.body)),
-              'filename': filename,
-              'contentType': 'json',
-            };
-          } catch (e) {
-            return {
-              'success': true,
-              'data': response.bodyBytes,
-              'filename': filename,
-              'contentType': 'text',
-            };
-          }
-        }
+      }
+      
+      // Handle both CSV and JSON responses
+      if (contentType.contains('csv')) {
+        return {
+          'success': true,
+          'data': response.bodyBytes, 
+          'filename': filename,
+          'contentType': 'csv',
+        };
       } else {
+        // Try to parse as JSON
         try {
           final responseData = json.decode(response.body);
+          if (responseData['success'] == false) {
+            return {
+              'success': false,
+              'message': responseData['message'] ?? 'Failed to generate report.',
+            };
+          }
           return {
-            'success': false,
-            'message': responseData['message'] ?? 'Failed to download report.',
+            'success': true,
+            'data': Uint8List.fromList(utf8.encode(response.body)),
+            'filename': filename,
+            'contentType': 'json',
           };
         } catch (e) {
           return {
-            'success': false,
-            'message': 'Server error: ${response.statusCode}',
+            'success': true,
+            'data': response.bodyBytes,
+            'filename': filename,
+            'contentType': 'text',
           };
         }
       }
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Network error or timeout: ${e.toString()}',
-      };
+    } else {
+      try {
+        final responseData = json.decode(response.body);
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Failed to download report.',
+        };
+      } catch (e) {
+        return {
+          'success': false,
+          'message': 'Server error: ${response.statusCode}',
+        };
+      }
     }
+  } catch (e) {
+    return {
+      'success': false,
+      'message': 'Network error or timeout: ${e.toString()}',
+    };
   }
-
+}
   Future<void> fetchCycles(String userId, String token) async {
     _isLoading = true;
     notifyListeners();  

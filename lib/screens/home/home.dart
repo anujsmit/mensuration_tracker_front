@@ -6,9 +6,9 @@ import 'package:mensurationhealthapp/providers/profile_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:mensurationhealthapp/config/config.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback? onProfileTabRequested;
@@ -24,12 +24,16 @@ class _HomePageState extends State<HomePage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Map<DateTime, List<Map<String, dynamic>>> _notes = {};
+  Map<DateTime, List<String>> _events = {};
+  bool _isDialogOpen = false; // Track if dialog is open
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _loadCalendarData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCalendarData();
+    });
   }
 
   void _loadCalendarData() {
@@ -44,20 +48,33 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchCalendarData(String token) async {
     try {
       final now = DateTime.now();
-      final profileBaseUrl = context.read<ProfileProvider>().baseUrl;
+      final baseUrl = '${Config.apiAuthBaseUrl}/profile';
       final response = await http.get(
         Uri.parse(
-          '$profileBaseUrl/calendar?year=${now.year}&month=${now.month.toString().padLeft(2, '0')}',
+          '$baseUrl/calendar?year=${now.year}&month=${now.month.toString().padLeft(2, '0')}',
         ),
         headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        setState(() {
-          _notes = _parseCalendarNotes(data['data']['notes']);
-        });
-        print('Calendar data loaded: $data');
+        if (data['status'] == 'success') {
+          final calendarData = data['data'];
+          setState(() {
+            // Parse notes
+            final notesList = calendarData['notes'] ?? [];
+            _notes = _parseCalendarNotes(notesList);
+
+            // Parse events
+            final eventsList = calendarData['events'] ?? [];
+            _events = _parseCalendarEvents(eventsList);
+          });
+          print('Calendar data loaded successfully');
+        } else {
+          print('Error in response: ${data['message']}');
+        }
+      } else {
+        print('Failed to load calendar data: ${response.statusCode}');
       }
     } catch (error) {
       print('Error loading calendar data: $error');
@@ -68,13 +85,58 @@ class _HomePageState extends State<HomePage> {
     List<dynamic> notes,
   ) {
     final Map<DateTime, List<Map<String, dynamic>>> result = {};
+
+    if (notes.isEmpty) return result;
+
     for (var note in notes) {
-      final date = DateTime.parse(note['note_date']).toLocal();
-      final dateOnly = DateTime(date.year, date.month, date.day);
-      if (!result.containsKey(dateOnly)) {
-        result[dateOnly] = [];
+      try {
+        final dateStr = note['date'] ?? note['note_date'];
+        if (dateStr != null) {
+          final date = DateTime.parse(dateStr).toLocal();
+          final dateOnly = DateTime(date.year, date.month, date.day);
+
+          if (!result.containsKey(dateOnly)) {
+            result[dateOnly] = [];
+          }
+
+          result[dateOnly]!.add({
+            'content': note['content'] ?? '',
+            'mood': note['mood'] ?? 'Normal',
+            'id': note['id']?.toString(),
+            'updated_at': note['updated_at'],
+          });
+        }
+      } catch (e) {
+        print('Error parsing note: $e');
       }
-      result[dateOnly]!.add(note);
+    }
+    return result;
+  }
+
+  Map<DateTime, List<String>> _parseCalendarEvents(List<dynamic> events) {
+    final Map<DateTime, List<String>> result = {};
+
+    if (events.isEmpty) return result;
+
+    for (var event in events) {
+      try {
+        final dateStr = event['date'];
+        if (dateStr != null) {
+          final date = DateTime.parse(dateStr).toLocal();
+          final dateOnly = DateTime(date.year, date.month, date.day);
+
+          if (!result.containsKey(dateOnly)) {
+            result[dateOnly] = [];
+          }
+
+          final eventType = event['event'];
+          if (eventType != null) {
+            result[dateOnly]!.add(eventType);
+          }
+        }
+      } catch (e) {
+        print('Error parsing event: $e');
+      }
     }
     return result;
   }
@@ -84,10 +146,10 @@ class _HomePageState extends State<HomePage> {
     String token,
   ) async {
     try {
-      final profileBaseUrl = context.read<ProfileProvider>().baseUrl;
+      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
       final response = await http.get(
         Uri.parse(
-          '$profileBaseUrl/notes?date=${DateFormat('yyyy-MM-dd').format(date)}',
+          '$notesBaseUrl?date=${DateFormat('yyyy-MM-dd').format(date)}',
         ),
         headers: {'Authorization': 'Bearer $token'},
       );
@@ -105,213 +167,83 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showAddNoteDialog(
-    BuildContext context,
-    DateTime selectedDay,
-    ProfileProvider profileProvider,
-  ) async {
-    final authProvider = context.read<AuthProvider>();
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+  void _showAddNoteDialog(BuildContext context, DateTime selectedDay) {
+    // Prevent opening multiple dialogs
+    if (_isDialogOpen) {
+      return;
+    }
 
-    TextEditingController noteController = TextEditingController();
-    String? selectedMood;
-    String? editingNoteId;
+    _isDialogOpen = true;
 
-    // Fetch existing notes for the selected date
-    final previousNotes = await _fetchNotesForDate(
-      selectedDay,
-      authProvider.token!,
-    );
-
-    // Use StateBuilder to manage dialog state
     showDialog(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text(
-            editingNoteId != null
-                ? 'Edit Note for ${DateFormat('MMM dd, yyyy').format(selectedDay)}'
-                : 'Add Note for ${DateFormat('MMM dd, yyyy').format(selectedDay)}',
-            style: theme.textTheme.titleLarge,
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                TextField(
-                  controller: noteController,
-                  decoration: InputDecoration(
-                    labelText: 'Note',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedMood,
-                  decoration: InputDecoration(
-                    labelText: 'Mood',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  items:
-                      [
-                        'Happy',
-                        'Sad',
-                        'Anxious',
-                        'Energetic',
-                        'Tired',
-                        'Normal',
-                      ].map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                  onChanged: (value) {
-                    setDialogState(() {
-                      selectedMood = value;
-                    });
-                  },
-                ),
-                if (previousNotes.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Previous Notes',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: colors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...previousNotes.map(
-                    (note) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: GestureDetector(
-                        onTap: () {
-                          setDialogState(() {
-                            editingNoteId = note['id'].toString();
-                            noteController.text = note['content'] ?? '';
-                            selectedMood = note['mood'];
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(8.0),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: editingNoteId == note['id'].toString()
-                                  ? colors.primary
-                                  : colors.outline.withOpacity(0.2),
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Note: ${note['content'] ?? 'No content'}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colors.onSurface.withOpacity(0.8),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Mood: ${note['mood'] ?? 'Not set'}',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colors.onSurface.withOpacity(0.6),
-                                ),
-                              ),
-                              if (note['updated_at'] != null)
-                                Text(
-                                  'Updated: ${DateFormat('MMM dd, yyyy, hh:mm a').format(DateTime.parse(note['updated_at']))}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colors.onSurface.withOpacity(0.6),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  final url = editingNoteId != null
-                      ? '${profileProvider.baseUrl}/notes/$editingNoteId'
-                      : '${profileProvider.baseUrl}/notes';
-                  final method = editingNoteId != null ? http.put : http.post;
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return _NoteDialog(
+          selectedDay: selectedDay,
+          onDismiss: () {
+            _isDialogOpen = false;
+          },
+          onNoteSaved: () {
+            setState(() {
+              _loadCalendarData();
+            });
+          },
+        );
+      },
+    ).then((value) {
+      // Dialog is closed
+      _isDialogOpen = false;
+    });
+  }
 
-                  final response = await method(
-                    Uri.parse(url),
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': 'Bearer ${authProvider.token}',
-                    },
-                    body: json.encode({
-                      'date': DateFormat('yyyy-MM-dd').format(selectedDay),
-                      'content': noteController.text,
-                      'mood': selectedMood,
-                    }),
-                  );
+  void _refreshCalendarEvents() {
+    final authProvider = context.read<AuthProvider>();
+    if (authProvider.isAuth && authProvider.token != null) {
+      _fetchCalendarData(authProvider.token!);
+    }
+  }
 
-                  if (response.statusCode == 200 ||
-                      response.statusCode == 201) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          editingNoteId != null
-                              ? 'Note updated successfully'
-                              : 'Note saved successfully',
-                        ),
-                        backgroundColor: colors.primary,
-                      ),
-                    );
-                    setState(() {
-                      _loadCalendarData();
-                    });
-                    Navigator.pop(dialogContext);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Error ${editingNoteId != null ? 'updating' : 'saving'} note',
-                        ),
-                        backgroundColor: colors.error,
-                      ),
-                    );
-                  }
-                } catch (error) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Error ${editingNoteId != null ? 'updating' : 'saving'} note: $error',
-                      ),
-                      backgroundColor: colors.error,
-                    ),
-                  );
-                }
-              },
-              child: Text(editingNoteId != null ? 'Update' : 'Save'),
-            ),
-          ],
-        ),
-      ),
-    );
+  List<String> _getEventsForDay(DateTime day, CycleData? cycleData) {
+    final List<String> events = [];
+
+    // Add calendar events
+    final dateOnly = DateTime(day.year, day.month, day.day);
+    if (_events.containsKey(dateOnly)) {
+      events.addAll(_events[dateOnly]!);
+    }
+
+    // Add cycle events if we have cycle data
+    if (cycleData != null) {
+      final dayOfCycle = _calculateDayOfCycle(day, cycleData);
+
+      if (dayOfCycle <= cycleData.periodLength) {
+        if (!events.contains('Period')) events.add('Period');
+      }
+
+      if (dayOfCycle >= cycleData.fertileWindowStartDay &&
+          dayOfCycle <= cycleData.fertileWindowEndDay) {
+        if (!events.contains('Fertile')) events.add('Fertile');
+      }
+
+      if (dayOfCycle == cycleData.ovulationDay) {
+        if (!events.contains('Ovulation')) events.add('Ovulation');
+      }
+    }
+
+    // Add note indicator
+    if (_notes.containsKey(dateOnly) && _notes[dateOnly]!.isNotEmpty) {
+      if (!events.contains('Note')) events.add('Note');
+    }
+
+    return events;
+  }
+
+  int _calculateDayOfCycle(DateTime day, CycleData cycleData) {
+    final now = DateTime.now();
+    final daysDifference = day.difference(now).inDays;
+    return (cycleData.currentDay + daysDifference - 1) % cycleData.cycleLength +
+        1;
   }
 
   @override
@@ -478,7 +410,7 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: colors.surface,
       body: RefreshIndicator(
         onRefresh: () async {
-          profileProvider.fetchProfile(
+          await profileProvider.fetchProfile(
             authProvider.userId!,
             authProvider.token!,
           );
@@ -494,7 +426,7 @@ class _HomePageState extends State<HomePage> {
                   FadeInDown(child: _buildWelcomeCard(context, theme)),
                   const SizedBox(height: 20),
                   FadeInUp(
-                    child: _buildCalendarSection(profileProvider, theme),
+                    child: _buildCalendarSection(cycleData, theme),
                   ),
                   const SizedBox(height: 20),
                   FadeInUp(
@@ -525,7 +457,8 @@ class _HomePageState extends State<HomePage> {
     final colors = theme.colorScheme;
 
     return Card(
-      elevation: 0,
+      elevation: 2,
+      shadowColor: colors.shadow.withOpacity(0.1),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: colors.surfaceVariant,
       child: Padding(
@@ -584,8 +517,7 @@ class _HomePageState extends State<HomePage> {
     final colors = theme.colorScheme;
     final daysUntilNextPeriod = data.cycleLength - data.currentDay;
     final daysUntilFertile = data.fertileWindowStartDay - data.currentDay;
-    final isFertile =
-        data.currentDay >= data.fertileWindowStartDay &&
+    final isFertile = data.currentDay >= data.fertileWindowStartDay &&
         data.currentDay <= data.fertileWindowEndDay;
 
     return Column(
@@ -603,7 +535,8 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
         Card(
-          elevation: 0,
+          elevation: 2,
+          shadowColor: colors.shadow.withOpacity(0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -644,7 +577,7 @@ class _HomePageState extends State<HomePage> {
                   days: data.ovulationDay > data.currentDay
                       ? data.ovulationDay - data.currentDay
                       : (data.cycleLength - data.currentDay) +
-                            data.ovulationDay,
+                          data.ovulationDay,
                   color: colors.tertiary,
                   theme: theme,
                 ),
@@ -713,12 +646,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildCalendarSection(
-    ProfileProvider profileProvider,
-    ThemeData theme,
-  ) {
+  Widget _buildCalendarSection(CycleData cycleData, ThemeData theme) {
     final colors = theme.colorScheme;
-    final cycleData = _calculateCycleData(profileProvider, DateTime.now());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -735,7 +664,8 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
         Card(
-          elevation: 0,
+          elevation: 2,
+          shadowColor: colors.shadow.withOpacity(0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -756,15 +686,22 @@ class _HomePageState extends State<HomePage> {
                     });
                   },
                   onDaySelected: (selectedDay, focusedDay) {
-                    setState(() {
-                      _selectedDay = selectedDay;
-                      _focusedDay = focusedDay;
-                    });
-                    _showAddNoteDialog(context, selectedDay, profileProvider);
+                    // Prevent reopening if already selected
+                    if (_selectedDay != selectedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                    }
+
+                    // Always show dialog on click
+                    _showAddNoteDialog(context, selectedDay);
                   },
                   onPageChanged: (focusedDay) {
-                    _focusedDay = focusedDay;
-                    _loadCalendarData();
+                    setState(() {
+                      _focusedDay = focusedDay;
+                    });
+                    _refreshCalendarEvents();
                   },
                   calendarStyle: CalendarStyle(
                     todayDecoration: BoxDecoration(
@@ -785,13 +722,7 @@ class _HomePageState extends State<HomePage> {
                     formatButtonVisible: false,
                     titleCentered: true,
                   ),
-                  eventLoader: (day) {
-                    final dateOnly = DateTime(day.year, day.month, day.day);
-                    return [
-                      ..._getEventsForDay(day, cycleData),
-                      if (_notes[dateOnly]?.isNotEmpty ?? false) 'Note',
-                    ];
-                  },
+                  eventLoader: (day) => _getEventsForDay(day, cycleData),
                 ),
                 const SizedBox(height: 16),
                 _buildCalendarLegend(theme),
@@ -801,27 +732,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ],
     );
-  }
-
-  List<dynamic> _getEventsForDay(DateTime day, CycleData cycleData) {
-    final events = <dynamic>[];
-    final dayOfCycle =
-        day.difference(DateTime.now()).inDays + cycleData.currentDay;
-
-    if (dayOfCycle <= cycleData.periodLength) {
-      events.add('Period');
-    }
-
-    if (dayOfCycle >= cycleData.fertileWindowStartDay &&
-        dayOfCycle <= cycleData.fertileWindowEndDay) {
-      events.add('Fertile');
-    }
-
-    if (dayOfCycle == cycleData.ovulationDay) {
-      events.add('Ovulation');
-    }
-
-    return events;
   }
 
   Widget _buildCalendarLegend(ThemeData theme) {
@@ -896,8 +806,7 @@ class _HomePageState extends State<HomePage> {
                   "Day ${data.fertileWindowStartDay}-${data.fertileWindowEndDay}",
               icon: Icons.favorite,
               color: colors.secondary,
-              isActive:
-                  data.currentDay >= data.fertileWindowStartDay &&
+              isActive: data.currentDay >= data.fertileWindowStartDay &&
                   data.currentDay <= data.fertileWindowEndDay,
               theme: theme,
             ),
@@ -932,7 +841,8 @@ class _HomePageState extends State<HomePage> {
     required ThemeData theme,
   }) {
     return Card(
-      elevation: 0,
+      elevation: isActive ? 4 : 1,
+      shadowColor: color.withOpacity(0.2),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
@@ -988,8 +898,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildFertilityDetailsSection(CycleData data, ThemeData theme) {
     final colors = theme.colorScheme;
-    final isFertile =
-        data.currentDay >= data.fertileWindowStartDay &&
+    final isFertile = data.currentDay >= data.fertileWindowStartDay &&
         data.currentDay <= data.fertileWindowEndDay;
 
     return Column(
@@ -1007,7 +916,8 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
         Card(
-          elevation: 0,
+          elevation: 2,
+          shadowColor: colors.shadow.withOpacity(0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -1112,7 +1022,8 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 12),
         Card(
-          elevation: 0,
+          elevation: 2,
+          shadowColor: colors.shadow.withOpacity(0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -1218,21 +1129,8 @@ class _HomePageState extends State<HomePage> {
     final fertileWindowStartDay = (ovulationDay - 5).clamp(1, cycleLength);
     final fertileWindowEndDay = (ovulationDay + 1).clamp(1, cycleLength);
 
-    String phase;
-    if (currentDay <= periodLength) {
-      phase = "Menstruation";
-    } else if (currentDay >= fertileWindowStartDay &&
-        currentDay <= fertileWindowEndDay) {
-      phase = currentDay == ovulationDay ? "Ovulation" : "Fertile Window";
-    } else if (currentDay > ovulationDay) {
-      phase = "Luteal Phase";
-    } else {
-      phase = "Follicular Phase";
-    }
-
     return CycleData(
       currentDay: currentDay,
-      phase: phase,
       cycleLength: cycleLength,
       periodLength: periodLength,
       ovulationDay: ovulationDay,
@@ -1266,28 +1164,476 @@ class _HomePageState extends State<HomePage> {
         return 0.0;
     }
   }
+}
 
-  Color _getPhaseColor(String phase, ColorScheme colors) {
-    switch (phase) {
-      case "Menstruation":
-        return colors.primary;
-      case "Fertile Window":
-        return colors.secondary;
-      case "Ovulation":
-        return colors.tertiary;
-      case "Luteal Phase":
-        return colors.primaryContainer;
-      case "Follicular Phase":
-        return colors.primary.withOpacity(0.7);
-      default:
-        return colors.primary;
+// Separate NoteDialog widget to prevent multiple dialog issues
+class _NoteDialog extends StatefulWidget {
+  final DateTime selectedDay;
+  final VoidCallback onDismiss;
+  final VoidCallback onNoteSaved;
+
+  const _NoteDialog({
+    required this.selectedDay,
+    required this.onDismiss,
+    required this.onNoteSaved,
+  });
+
+  @override
+  State<_NoteDialog> createState() => __NoteDialogState();
+}
+
+class __NoteDialogState extends State<_NoteDialog> {
+  late TextEditingController _noteController;
+  late TextEditingController _padsController;
+  late TextEditingController _periodNotesController;
+  String? _selectedMood;
+  String? _periodIntensity;
+  bool _isPeriodDay = false;
+  int _padsUsed = 0;
+  String? _editingNoteId;
+  List<Map<String, dynamic>> _previousNotes = [];
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _noteController = TextEditingController();
+    _padsController = TextEditingController();
+    _periodNotesController = TextEditingController();
+    _selectedMood = 'Normal';
+    _periodIntensity = 'medium';
+    _loadExistingNotes();
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    _padsController.dispose();
+    _periodNotesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadExistingNotes() async {
+    final authProvider = context.read<AuthProvider>();
+    final token = authProvider.token;
+
+    if (token == null) return;
+
+    try {
+      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
+      final response = await http.get(
+        Uri.parse(
+          '$notesBaseUrl?date=${DateFormat('yyyy-MM-dd').format(widget.selectedDay)}',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && data['data'] is List) {
+          setState(() {
+            _previousNotes = List<Map<String, dynamic>>.from(data['data']);
+
+            // Pre-fill with first note if exists
+            if (_previousNotes.isNotEmpty) {
+              final firstNote = _previousNotes.first;
+              _editingNoteId = firstNote['id']?.toString();
+              _noteController.text = firstNote['content'] ?? '';
+              _selectedMood = firstNote['mood'] ?? 'Normal';
+              _isPeriodDay = firstNote['is_period_day'] ?? false;
+              _padsUsed = firstNote['pads_used'] ?? 0;
+              _padsController.text = _padsUsed.toString();
+              _periodIntensity = firstNote['period_intensity'] ?? 'medium';
+              _periodNotesController.text = firstNote['period_notes'] ?? '';
+            }
+          });
+        }
+      }
+    } catch (error) {
+      print('Error loading notes: $error');
     }
+  }
+
+  Future<void> _saveNote() async {
+    if (_noteController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a note'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
+      final url = _editingNoteId != null
+          ? '$notesBaseUrl/$_editingNoteId'
+          : notesBaseUrl;
+      final method = _editingNoteId != null ? http.put : http.post;
+
+      final response = await method(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${authProvider.token}',
+        },
+        body: json.encode({
+          'date': DateFormat('yyyy-MM-dd').format(widget.selectedDay),
+          'content': _noteController.text.trim(),
+          'mood': _selectedMood,
+          'isPeriodDay': _isPeriodDay,
+          'padsUsed': _isPeriodDay ? _padsUsed : 0,
+          'periodIntensity': _isPeriodDay ? _periodIntensity : null,
+          'periodNotes':
+              _isPeriodDay ? _periodNotesController.text.trim() : null,
+        }),
+      );
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        if (responseData['status'] == 'success') {
+          widget.onNoteSaved();
+          Navigator.of(context).pop();
+        } else {
+          throw Exception(responseData['message'] ?? 'Failed to save note');
+        }
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to save note');
+      }
+    } catch (error) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${error.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteNote() async {
+    if (_editingNoteId == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
+      final response = await http.delete(
+        Uri.parse('$notesBaseUrl/$_editingNoteId'),
+        headers: {
+          'Authorization': 'Bearer ${authProvider.token}',
+        },
+      );
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (response.statusCode == 200) {
+        widget.onNoteSaved();
+        Navigator.of(context).pop();
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to delete note');
+      }
+    } catch (error) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${error.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return AlertDialog(
+      elevation: 4,
+      shadowColor: colors.shadow.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        _editingNoteId != null
+            ? 'Edit Note for ${DateFormat('MMM dd, yyyy').format(widget.selectedDay)}'
+            : 'Add Note for ${DateFormat('MMM dd, yyyy').format(widget.selectedDay)}',
+        style: theme.textTheme.titleLarge,
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  TextField(
+                    controller: _noteController,
+                    decoration: InputDecoration(
+                      labelText: 'Note',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _selectedMood,
+                    decoration: InputDecoration(
+                      labelText: 'Mood',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    items: [
+                      'Happy',
+                      'Sad',
+                      'Anxious',
+                      'Energetic',
+                      'Tired',
+                      'Normal',
+                    ].map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedMood = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    title: const Text('This is a period day'),
+                    value: _isPeriodDay,
+                    onChanged: (value) {
+                      setState(() {
+                        _isPeriodDay = value ?? false;
+                        if (!_isPeriodDay) {
+                          _padsUsed = 0;
+                          _padsController.text = '0';
+                          _periodIntensity = 'medium';
+                          _periodNotesController.clear();
+                        }
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: colors.primary,
+                  ),
+                  if (_isPeriodDay) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _padsController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Pads Used',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onChanged: (value) {
+                        _padsUsed = int.tryParse(value) ?? 0;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _periodIntensity,
+                      decoration: InputDecoration(
+                        labelText: 'Period Intensity',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: [
+                        'light',
+                        'medium',
+                        'heavy',
+                      ].map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value.capitalize()),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _periodIntensity = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _periodNotesController,
+                      decoration: InputDecoration(
+                        labelText: 'Period Notes',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      maxLines: 2,
+                    ),
+                  ],
+                  if (_previousNotes.isNotEmpty &&
+                      _previousNotes.length > 1) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Other Notes for this Date',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ..._previousNotes.sublist(1).map(
+                          (note) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _editingNoteId = note['id']?.toString();
+                                  _noteController.text = note['content'] ?? '';
+                                  _selectedMood = note['mood'];
+                                  _isPeriodDay = note['is_period_day'] ?? false;
+                                  _padsUsed = note['pads_used'] ?? 0;
+                                  _padsController.text = _padsUsed.toString();
+                                  _periodIntensity =
+                                      note['period_intensity'] ?? 'medium';
+                                  _periodNotesController.text =
+                                      note['period_notes'] ?? '';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(12.0),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color:
+                                        _editingNoteId == note['id']?.toString()
+                                            ? colors.primary
+                                            : colors.outline.withOpacity(0.2),
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: colors.surfaceVariant,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Note: ${note['content'] ?? 'No content'}',
+                                      style:
+                                          theme.textTheme.bodyMedium?.copyWith(
+                                        color:
+                                            colors.onSurface.withOpacity(0.8),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Mood: ${note['mood'] ?? 'Not set'}',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            colors.onSurface.withOpacity(0.6),
+                                      ),
+                                    ),
+                                    if (note['is_period_day'] ?? false) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Pads Used: ${note['pads_used'] ?? 0}',
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color:
+                                              colors.onSurface.withOpacity(0.6),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Intensity: ${note['period_intensity'] ?? 'None'}',
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color:
+                                              colors.onSurface.withOpacity(0.6),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Period Notes: ${note['period_notes'] ?? ''}',
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color:
+                                              colors.onSurface.withOpacity(0.6),
+                                        ),
+                                      ),
+                                    ],
+                                    if (note['updated_at'] != null)
+                                      Text(
+                                        'Updated: ${DateFormat('MMM dd, yyyy, hh:mm a').format(DateTime.parse(note['updated_at']))}',
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color:
+                                              colors.onSurface.withOpacity(0.6),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                  ],
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading
+              ? null
+              : () {
+                  widget.onDismiss();
+                  Navigator.of(context).pop();
+                },
+          child: const Text('Cancel'),
+        ),
+        if (_editingNoteId != null)
+          TextButton(
+            onPressed: _isLoading ? null : _deleteNote,
+            child: Text('Delete', style: TextStyle(color: colors.error)),
+          ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _saveNote,
+          child: Text(_editingNoteId != null ? 'Update' : 'Save'),
+        ),
+      ],
+    );
+  }
+}
+
+extension StringExtension on String {
+  String capitalize() {
+    return "${this[0].toUpperCase()}${substring(1)}";
   }
 }
 
 class CycleData {
   final int currentDay;
-  final String phase;
   final int cycleLength;
   final int periodLength;
   final int ovulationDay;
@@ -1298,7 +1644,6 @@ class CycleData {
 
   CycleData({
     required this.currentDay,
-    required this.phase,
     required this.cycleLength,
     required this.periodLength,
     required this.ovulationDay,

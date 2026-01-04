@@ -9,11 +9,8 @@ import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
 import 'package:mensurationhealthapp/screens/auth/phone_login_screen.dart';
 import 'package:mensurationhealthapp/screens/home/homescreen.dart';
-
-// Renamed from LoginScreen to FirebaseLoginScreen to reflect the new primary auth methods
 class FirebaseLoginScreen extends StatefulWidget {
   const FirebaseLoginScreen({super.key});
-
   @override
   _FirebaseLoginScreenState createState() => _FirebaseLoginScreenState();
 }

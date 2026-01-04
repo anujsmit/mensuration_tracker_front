@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "966950404407-rm4sn7h3094vbadu14trbthp1ummsi6d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anujkattel.mensurationtracker",
+            "certificate_hash": "9b807c145c107b137c47c0ae575070a734ffa383"
+          }
+        },
+        {
           "client_id": "966950404407-j4pa1mtg8p8mdb975bc3m38ljiu386uv.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +37,13 @@
             {
               "client_id": "966950404407-j4pa1mtg8p8mdb975bc3m38ljiu386uv.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "966950404407-635ckci9ndusgv60k5v544prpodcpabk.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.anujkattel.mensurationtracker"
+              }
             }
           ]
         }
