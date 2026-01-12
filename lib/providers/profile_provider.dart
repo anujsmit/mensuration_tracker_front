@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:typed_data'; // Added for byte data
-import 'package:mensurationhealthapp/config/config.dart'; // Added Config import
+import 'dart:typed_data';
+import 'package:mensurationhealthapp/config/config.dart';
 
 class ProfileProvider with ChangeNotifier {
   Map<String, dynamic>? _profile;
@@ -27,6 +27,55 @@ class ProfileProvider with ChangeNotifier {
   String get error => _error;
   bool get isLoading => _isLoading;
 
+// Add this method to update username
+Future<bool> updateUsername(String userId, String username, String token) async {
+  _isLoading = true;
+  notifyListeners();
+
+  try {
+    final response = await http.put(
+      Uri.parse('${Config.apiAuthBaseUrl}/profile/username'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({
+        'username': username,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final responseData = json.decode(response.body);
+      
+      if (responseData['status'] == 'success') {
+        // Update local username
+        _username = username;
+        
+        _error = '';
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = responseData['message'] ?? 'Failed to update username';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } else {
+      final responseData = json.decode(response.body);
+      _error = responseData['message'] ?? 
+               'Failed to update username. Status: ${response.statusCode}';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  } catch (e) {
+    _error = 'Network error: ${e.toString()}';
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+}
   Future<void> fetchProfile(String userId, String token) async {
     _isLoading = true;
     notifyListeners();
@@ -41,8 +90,9 @@ class ProfileProvider with ChangeNotifier {
         final responseData = json.decode(response.body);
         _profile =
             responseData['hasProfile'] == true ? responseData['profile'] : null;
-        _username = responseData['username'];
-        _email = responseData['email'];
+        _username = responseData['username'] ?? _username;
+        _email = responseData['email'] ?? _email;
+
         _error = '';
       } else {
         _error =

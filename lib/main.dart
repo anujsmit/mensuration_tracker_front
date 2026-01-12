@@ -14,6 +14,7 @@ import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
 import 'package:mensurationhealthapp/providers/profile_provider.dart';
 import 'package:mensurationhealthapp/providers/user_provider.dart';
+import 'package:mensurationhealthapp/providers/ReportProvider.dart';
 
 import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart';
 import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
@@ -53,6 +54,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => UserNotificationProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => AdminNotificationProvider()),
+        ChangeNotifierProvider(create: (_) => ReportProvider()), 
       ],
       child: MaterialApp(
         title: 'Menstrual Health App',
