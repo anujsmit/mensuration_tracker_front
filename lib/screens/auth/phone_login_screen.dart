@@ -1,8 +1,6 @@
-// anujsmit/mensuration_tracker_front/mensuration_tracker_front-f791c10d8517a5f857299bbd66976c42835a8ba8a/lib/screens/auth/phone_login_screen.dart (MODIFIED)
-
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
@@ -32,9 +30,6 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
         timeout: const Duration(seconds: 60),
         // Handles OTP auto-retrieval
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // This block is for auto-verification on Android; skip OTP screen.
-          // In a real application, you'd complete the sign-in and then call the backend token exchange here.
-          // For simplicity in this demo, we handle the manual code sent case.
         },
         // Handles failure
         verificationFailed: (FirebaseAuthException e) {
@@ -72,7 +67,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
           }
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          // Optional: handle timeout
+          
         },
       );
     } catch (error) {
@@ -148,9 +143,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(),
                       ),
-                      counterText: '', // Remove the character counter
+                      counterText: '',
                     ),
-                    initialCountryCode: 'US',
+                    initialCountryCode: 'IN',
                     keyboardType: TextInputType.phone,
                     onChanged: (phone) {
                       _fullPhoneNumber = phone.completeNumber;

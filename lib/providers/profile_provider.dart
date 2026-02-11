@@ -27,7 +27,19 @@ class ProfileProvider with ChangeNotifier {
   String get error => _error;
   bool get isLoading => _isLoading;
 
-// Add this method to update username
+
+
+    void clearData() {
+    _profile = null;
+    _cycles = [];
+    _symptoms = [];
+    _isVerified = false;
+    _username = null;
+    _email = null;
+    _error = '';
+    _isLoading = false;
+    notifyListeners();
+  }
 Future<bool> updateUsername(String userId, String username, String token) async {
   _isLoading = true;
   notifyListeners();
@@ -48,7 +60,6 @@ Future<bool> updateUsername(String userId, String username, String token) async 
       final responseData = json.decode(response.body);
       
       if (responseData['status'] == 'success') {
-        // Update local username
         _username = username;
         
         _error = '';

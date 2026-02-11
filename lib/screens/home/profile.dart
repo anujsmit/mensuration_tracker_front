@@ -76,7 +76,10 @@ class _ProfilePageState extends State<ProfilePage> {
               Text(
                 'Loading your profile...',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.7),
                     ),
               ),
             ],
@@ -88,135 +91,140 @@ class _ProfilePageState extends State<ProfilePage> {
     final isProfileComplete = _isProfileComplete(profileProvider.profile);
     final displayUsername =
         authProvider.username ?? profileProvider.username ?? 'User';
-    final displayEmail =
-        authProvider.email ?? profileProvider.email ?? 'user@example.com';
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        elevation: 0,
+        title: const Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () => _showLogoutDialog(context),
+          ),
+        ],
+      ),
       body: CustomScrollView(
         slivers: [
-          // App Bar with Profile Header
-          SliverAppBar(
-            expandedHeight: 220,
-            floating: false,
-            pinned: true,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Theme.of(context).colorScheme.primaryContainer,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+          // Profile Header Section
+          SliverToBoxAdapter(
+            child: Container(
+              height: 180,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.primary,
+                    Theme.of(context).colorScheme.primaryContainer,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 60.0, left: 20, right: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Profile Avatar
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.9),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 10,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              Icons.person_rounded,
-                              size: 40,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                          if (!isProfileComplete)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.warning_amber_rounded,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        displayUsername,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        displayEmail,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (!isProfileComplete)
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Profile Avatar
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 6,
-                          ),
+                          width: 80,
+                          height: 80,
                           decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.orange.withOpacity(0.3),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.info_outline_rounded,
-                                size: 16,
-                                color: Colors.orange,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Profile Incomplete',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.orange,
-                                ),
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.9),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 10,
+                                spreadRadius: 2,
                               ),
                             ],
                           ),
+                          child: Icon(
+                            Icons.person_rounded,
+                            size: 40,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
-                    ],
-                  ),
+                        if (!isProfileComplete)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.warning_amber_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      displayUsername,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (!isProfileComplete)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.orange.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Profile Incomplete',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -300,8 +308,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 showDialog(
                                   context: context,
                                   builder: (context) => _EditProfileDialog(
-                                    profileData:
-                                        profileProvider.profile ?? {},
+                                    profileData: profileProvider.profile ?? {},
                                     userId: authProvider.userId!,
                                     token: authProvider.token!,
                                   ),
@@ -334,8 +341,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   FadeInUp(
                     duration: const Duration(milliseconds: 500),
                     child: Container(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      margin:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -369,7 +376,115 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
 
-                const SizedBox(height: 100),
+                // Quick Actions Section
+                FadeInUp(
+                  duration: const Duration(milliseconds: 600),
+                  child: Container(
+                    margin: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.dashboard_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Quick Actions',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      Theme.of(context).colorScheme.onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        GridView.count(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.5,
+                          children: [
+                            _buildQuickActionCard(
+                              icon: Icons.calendar_today_rounded,
+                              title: 'Cycle Tracker',
+                              color: Colors.purple,
+                              onTap: () {
+                                // Navigate to cycle tracker
+                              },
+                            ),
+                            _buildQuickActionCard(
+                              icon: Icons.health_and_safety_rounded,
+                              title: 'Symptoms Log',
+                              color: Colors.green,
+                              onTap: () {
+                                // Navigate to symptoms
+                              },
+                            ),
+                            _buildQuickActionCard(
+                              icon: Icons.assessment_rounded,
+                              title: 'Health Report',
+                              color: Colors.orange,
+                              onTap: () {
+                                _downloadHealthReport(context);
+                              },
+                            ),
+                            _buildQuickActionCard(
+                              icon: Icons.notifications_rounded,
+                              title: 'Reminders',
+                              color: Colors.red,
+                              onTap: () {
+                                // Navigate to reminders
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Logout Button
+                FadeInUp(
+                  duration: const Duration(milliseconds: 700),
+                  child: Container(
+                    margin: const EdgeInsets.all(16),
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .error
+                            .withOpacity(0.1),
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      icon: const Icon(Icons.logout_rounded, size: 20),
+                      label: const Text(
+                        'Logout',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => _showLogoutDialog(context),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
               ],
             ),
           ),
@@ -399,58 +514,58 @@ class _ProfilePageState extends State<ProfilePage> {
           }
         },
       ),
+    );
+  }
 
-      // Logout Button in Bottom Navigation
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(
-            top: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
-          ),
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+          width: 1,
         ),
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error.withOpacity(0.1),
-            foregroundColor: Theme.of(context).colorScheme.error,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
-          icon: const Icon(Icons.logout_rounded, size: 20),
-          label: const Text(
-            'Logout',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Logout'),
-                content: const Text('Are you sure you want to logout?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      context.read<AuthProvider>().signOut();
-                    },
-                    child: const Text(
-                      'Logout',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
               ),
-            );
-          },
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -495,7 +610,8 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       _buildHealthCard(
         title: 'Flow Details',
-        value: '${profile['flow_amount'] ?? 'Not set'} • ${profile['flow_regularity']?.toString().replaceAll('_', ' ') ?? 'Not set'}',
+        value:
+            '${profile['flow_amount'] ?? 'Not set'} • ${profile['flow_regularity']?.toString().replaceAll('_', ' ') ?? 'Not set'}',
         icon: Icons.water_drop_rounded,
         color: Colors.teal,
       ),
@@ -601,6 +717,116 @@ class _ProfilePageState extends State<ProfilePage> {
       return date.toString();
     } catch (e) {
       return 'Invalid date';
+    }
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _logoutUser(context);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text(
+              'Logout',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _logoutUser(BuildContext context) async {
+    final authProvider = context.read<AuthProvider>();
+    final profileProvider = context.read<ProfileProvider>();
+
+    try {
+      // Clear profile data first
+      profileProvider.clearData();
+
+      // Logout from auth provider
+      await authProvider.signOut();
+
+      // Navigate to login screen
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+            context, '/login', (route) => false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadHealthReport(BuildContext context) async {
+    final profileProvider = context.read<ProfileProvider>();
+    final authProvider = context.read<AuthProvider>();
+
+    final token = authProvider.token;
+
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login again'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Generating report...'),
+          ],
+        ),
+      ),
+    );
+
+    final result = await profileProvider.downloadHealthReport(token);
+
+    if (mounted) {
+      Navigator.pop(context);
+
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Report downloaded: ${result['filename']}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download: ${result['message']}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }
@@ -762,18 +988,18 @@ class __EditProfileDialogState extends State<_EditProfileDialog> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
           ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+        );
     }
   }
 
@@ -1033,7 +1259,8 @@ class __EditProfileDialogState extends State<_EditProfileDialog> {
           lastDate: DateTime.now(),
         );
         if (date != null) {
-          _lastPeriodDateController.text = DateFormat('yyyy-MM-dd').format(date);
+          _lastPeriodDateController.text =
+              DateFormat('yyyy-MM-dd').format(date);
         }
       },
     );
