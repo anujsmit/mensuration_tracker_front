@@ -79,7 +79,7 @@ class NotificationItem {
 
 class UserNotificationProvider with ChangeNotifier {
   // Correct base URL for the notification routes inside the auth module
-  static const String _baseUrl =  '${Config.baseUrl}/notifications';
+  static const String _baseUrl = '${Config.baseUrl}/notification';
 
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;

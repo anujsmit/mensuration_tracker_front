@@ -12,7 +12,9 @@ import 'package:mensurationhealthapp/config/config.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback? onProfileTabRequested;
+
   const HomePage({super.key, this.onProfileTabRequested});
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -62,6 +64,7 @@ class _HomePageState extends State<HomePage> {
             // Parse notes
             final notesList = calendarData['notes'] ?? [];
             _notes = _parseCalendarNotes(notesList);
+
             // Parse events
             final eventsList = calendarData['events'] ?? [];
             _events = _parseCalendarEvents(eventsList);
