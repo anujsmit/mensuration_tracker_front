@@ -1,6 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-
+import 'package:http/http.dart' as http;
+import '../../config/config.dart';
 class LearnPage extends StatefulWidget {
   const LearnPage({super.key});
 
@@ -8,69 +9,115 @@ class LearnPage extends StatefulWidget {
   State<LearnPage> createState() => _LearnPageState();
 }
 
-class _LearnPageState extends State<LearnPage>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-  late YoutubePlayerController _youtubeController;
-  bool _isPlayerReady = false;
+class _LearnPageState extends State<LearnPage> {
+  final TextEditingController _messageController = TextEditingController();
+  final List<ChatMessage> _messages = [];
+  final ScrollController _scrollController = ScrollController();
+
+  bool _isTyping = false;
+  final String apiUrl = Config.chatApiUrl;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-    _controller.forward();
 
-    _initYoutubePlayer();
+    _messages.add(
+      ChatMessage(
+        text:
+            "🌸 Hi! I'm your menstrual health assistant. Ask me anything about periods, cramps, PMS, ovulation, hygiene, or menstrual health.",
+        isUser: false,
+      ),
+    );
   }
 
-  void _initYoutubePlayer() {
-    try {
-      final videoId = YoutubePlayer.convertUrlToId(
-            'https://www.youtube.com/watch?v=JMeKBKe2NVw',
-          ) ??
-          'JMeKBKe2NVw';
+  Future<void> _sendMessage() async {
+    if (_messageController.text.trim().isEmpty) return;
 
-      _youtubeController = YoutubePlayerController(
-        initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: false,
-          mute: false,
-          disableDragSeek: false,
-          loop: false,
-          isLive: false,
-          enableCaption: true,
-          hideControls: false,
-          hideThumbnail: false,
+    final userMessage = _messageController.text.trim();
+
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          text: userMessage,
+          isUser: true,
         ),
       );
+
+      _messageController.clear();
+      _isTyping = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "message": userMessage,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        setState(() {
+          _messages.add(
+            ChatMessage(
+              text: data["reply"] ??
+                  "Sorry, I couldn't understand that.",
+              isUser: false,
+            ),
+          );
+        });
+      } else {
+        setState(() {
+          _messages.add(
+            ChatMessage(
+              text:
+                  "⚠️ Server error. Please try again later.",
+              isUser: false,
+            ),
+          );
+        });
+      }
     } catch (e) {
-      print('Error initializing YouTube player: $e');
-      // Fallback to a default video ID if conversion fails
-      _youtubeController = YoutubePlayerController(
-        initialVideoId: 'JMeKBKe2NVw',
-        flags: const YoutubePlayerFlags(
-          autoPlay: false,
-          mute: false,
-          disableDragSeek: false,
-          loop: false,
-          isLive: false,
-          enableCaption: true,
-          hideControls: false,
-          hideThumbnail: false,
-        ),
-      );
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            text:
+                "❌ Unable to connect to AI server.",
+            isUser: false,
+          ),
+        );
+      });
     }
+
+    setState(() {
+      _isTyping = false;
+    });
+
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
-    _youtubeController.dispose();
+    _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -80,460 +127,181 @@ class _LearnPageState extends State<LearnPage>
     final colors = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Menstrual Education'),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FadeTransition(
-              opacity: _animation,
-              child: _buildSectionHeader(
-                title: "Understanding Menstruation",
-                icon: Icons.health_and_safety,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildInfoCard(
-                title: "What is a Period?",
-                content:
-                    "Menstruation (period) is the monthly shedding of the uterine lining. It's part of the menstrual cycle that prepares your body for pregnancy each month.",
-                icon: Icons.help_outline,
-                color: colors.primary,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildInfoCard(
-                title: "How Does It Occur?",
-                content:
-                    "Each month, hormones cause the lining of the uterus to thicken in preparation for a fertilized egg. When pregnancy doesn't occur, hormone levels drop, causing the lining to shed.",
-                icon: Icons.science,
-                color: colors.secondary,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildVideoPlayer(colors, theme),
-            const SizedBox(height: 24),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildSectionHeader(
-                title: "The Menstrual Cycle",
-                icon: Icons.cyclone,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildCyclePhaseCard(
-                phase: "Menstrual Phase (Days 1-5)",
-                description:
-                    "The uterine lining sheds through the vagina. Typically lasts 3-7 days.",
-                symptoms: "Cramps, bloating, fatigue",
-                color: colors.primary,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildCyclePhaseCard(
-                phase: "Follicular Phase (Days 6-14)",
-                description:
-                    "The pituitary gland releases FSH, stimulating follicles in the ovaries. One follicle matures into an egg.",
-                symptoms: "Increasing energy, improved mood",
-                color: colors.tertiary,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildCyclePhaseCard(
-                phase: "Ovulation (Day 14)",
-                description:
-                    "The ovary releases a mature egg which travels down the fallopian tube toward the uterus.",
-                symptoms: "Mild pelvic pain, increased libido",
-                color: colors.secondary,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildCyclePhaseCard(
-                phase: "Luteal Phase (Days 15-28)",
-                description:
-                    "If the egg isn't fertilized, hormone levels drop and the uterine lining begins to break down.",
-                symptoms: "PMS, breast tenderness, mood swings",
-                color: colors.primaryContainer,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 24),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildSectionHeader(
-                title: "Period Facts",
-                icon: Icons.lightbulb_outline,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...[
-              "The average menstrual cycle is 28 days, but normal cycles range from 21-35 days.",
-              "Periods typically last 3-7 days, with the heaviest flow in the first 2-3 days.",
-              "You lose about 30-40ml (2-3 tablespoons) of blood during a normal period.",
-              "Exercise and a balanced diet can help alleviate menstrual cramps."
-            ]
-                .map((fact) => FadeTransition(
-                      opacity: _animation,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: _buildFactItem(fact: fact, theme: theme),
-                      ),
-                    ))
-                .toList(),
-            const SizedBox(height: 24),
-            FadeTransition(
-              opacity: _animation,
-              child: _buildSectionHeader(
-                title: "When to See a Doctor",
-                icon: Icons.medical_services,
-                theme: theme,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...[
-              "Extreme pain that prevents normal activities",
-              "Bleeding that lasts more than 7 days",
-              "Periods that are less than 21 days apart",
-              "No period by age 15 or within 3 years of breast development"
-            ]
-                .map((warning) => FadeTransition(
-                      opacity: _animation,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child:
-                            _buildWarningCard(content: warning, theme: theme),
-                      ),
-                    ))
-                .toList(),
-            const SizedBox(height: 24),
-            FadeTransition(
-              opacity: _animation,
-              child: Text(
-                "Remember: Every body is different. Your cycle is unique to you!",
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  color: colors.onSurface.withOpacity(0.8),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: FadeTransition(
-                opacity: _animation,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.primary,
-                    foregroundColor: colors.onPrimary,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
-                  ),
-                  child: const Text('Back to Home'),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVideoPlayer(ColorScheme colors, ThemeData theme) {
-    return FadeTransition(
-      opacity: _animation,
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Text(
-                "Educational Video",
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  color: Colors.black.withOpacity(0.1),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: _isPlayerReady
-                      ? YoutubePlayer(
-                          controller: _youtubeController,
-                          aspectRatio: 16 / 9,
-                          showVideoProgressIndicator: true,
-                          progressIndicatorColor: colors.primary,
-                          progressColors: ProgressBarColors(
-                            playedColor: colors.primary,
-                            handleColor: colors.primary,
-                            bufferedColor: colors.primary.withOpacity(0.3),
-                            backgroundColor: colors.primary.withOpacity(0.1),
-                          ),
-                          onReady: () {
-                            setState(() => _isPlayerReady = true);
-                          },
-                        )
-                      : Container(
-                          height: 200,
-                          alignment: Alignment.center,
-                          child: const CircularProgressIndicator(),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader({
-    required String title,
-    required IconData icon,
-    required ThemeData theme,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-          border: Border(
-        bottom: BorderSide(
-            color: theme.colorScheme.primary.withOpacity(0.2), width: 2),
-      )),
-      child: Row(
+      body: Column(
         children: [
-          Icon(icon, color: theme.colorScheme.primary, size: 28),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface,
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: _messages.length + (_isTyping ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _messages.length && _isTyping) {
+                  return _buildTypingIndicator(theme);
+                }
+
+                final message = _messages[index];
+
+                return _buildMessageBubble(
+                  message,
+                  theme,
+                  colors,
+                );
+              },
             ),
           ),
+
+          _buildMessageInput(theme, colors),
         ],
       ),
     );
   }
 
-  Widget _buildInfoCard({
-    required String title,
-    required String content,
-    required IconData icon,
-    required Color color,
-    required ThemeData theme,
-  }) {
-    return Card(
-      elevation: 2,
-      shadowColor: color.withOpacity(0.2),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+  Widget _buildMessageBubble(
+    ChatMessage message,
+    ThemeData theme,
+    ColorScheme colors,
+  ) {
+    final isUser = message.isUser;
+
+    return Align(
+      alignment:
+          isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 10,
+        ),
+        constraints: BoxConstraints(
+          maxWidth:
+              MediaQuery.of(context).size.width * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color:
+              isUser
+                  ? colors.primary
+                  : colors.surfaceVariant,
+          borderRadius: BorderRadius.circular(20).copyWith(
+            topRight:
+                isUser
+                    ? const Radius.circular(4)
+                    : const Radius.circular(20),
+            topLeft:
+                isUser
+                    ? const Radius.circular(20)
+                    : const Radius.circular(4),
+          ),
+        ),
+        child: Text(
+          message.text,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color:
+                isUser
+                    ? colors.onPrimary
+                    : colors.onSurface,
+          ),
+        ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildTypingIndicator(ThemeData theme) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(20).copyWith(
+            topLeft: const Radius.circular(4),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              content,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.8),
-                height: 1.5,
-              ),
-            ),
+            _buildTypingDot(),
+            const SizedBox(width: 4),
+            _buildTypingDot(),
+            const SizedBox(width: 4),
+            _buildTypingDot(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCyclePhaseCard({
-    required String phase,
-    required String description,
-    required String symptoms,
-    required Color color,
-    required ThemeData theme,
-  }) {
-    return Card(
-      elevation: 1,
-      shadowColor: color.withOpacity(0.1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withOpacity(0.2), width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    phase,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.8),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline,
-                    size: 18, color: theme.colorScheme.secondary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    "Common symptoms: $symptoms",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+  Widget _buildTypingDot() {
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: const BoxDecoration(
+        color: Colors.grey,
+        shape: BoxShape.circle,
       ),
     );
   }
 
-  Widget _buildFactItem({
-    required String fact,
-    required ThemeData theme,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 6),
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary,
-            shape: BoxShape.circle,
+  Widget _buildMessageInput(
+    ThemeData theme,
+    ColorScheme colors,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        border: Border(
+          top: BorderSide(
+            color:
+                colors.outlineVariant.withOpacity(0.5),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            fact,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
-              height: 1.4,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWarningCard({
-    required String content,
-    required ThemeData theme,
-  }) {
-    return Card(
-      elevation: 1,
-      shadowColor: theme.colorScheme.error.withOpacity(0.1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
       ),
-      color: theme.colorScheme.errorContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
+      child: SafeArea(
         child: Row(
           children: [
-            Icon(Icons.warning_amber_rounded,
-                color: theme.colorScheme.onErrorContainer, size: 20),
-            const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                content,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onErrorContainer,
-                  fontWeight: FontWeight.w500,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(24),
                 ),
+                child: TextField(
+                  controller: _messageController,
+                  decoration: InputDecoration(
+                    hintText:
+                        "Ask me anything about menstruation...",
+                    border: InputBorder.none,
+                    contentPadding:
+                        const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  maxLines: null,
+                  textInputAction:
+                      TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            Container(
+              decoration: BoxDecoration(
+                color: colors.primary,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.send,
+                  color: Colors.white,
+                ),
+                onPressed: _sendMessage,
               ),
             ),
           ],
@@ -541,4 +309,14 @@ class _LearnPageState extends State<LearnPage>
       ),
     );
   }
+}
+
+class ChatMessage {
+  final String text;
+  final bool isUser;
+
+  ChatMessage({
+    required this.text,
+    required this.isUser,
+  });
 }

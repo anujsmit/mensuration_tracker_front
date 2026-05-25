@@ -1,48 +1,112 @@
 name: mensurationhealthapp
-description: "A new Flutter project."
+description: "Your personal menstrual health companion - Track cycles, symptoms, and get personalized insights"
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0' # Adjusted SDK constraint for compatibility
+  sdk: '>=3.0.0 <4.0.0'
+
+# Dependency version resolution
+dependency_overrides:
+  intl: ^0.19.0
+  web: ^1.0.0
 
 dependencies:
   flutter:
     sdk: flutter
+  
+  # ========== CORE ==========
+  provider: ^6.1.2
+  shared_preferences: ^2.2.3
+  path_provider: ^2.1.3
+  intl: ^0.19.0
+  
+  # ========== NETWORKING ==========
+  http: ^1.2.2
+  connectivity_plus: ^6.0.5
+  
+  # ========== UI COMPONENTS ==========
   cupertino_icons: ^1.0.8
-  http: ^1.4.0
-  shared_preferences: ^2.5.3
-  fluttertoast: ^8.2.12
-  intl: ^0.20.2
-  provider: ^6.1.5
-  flutter_svg: ^2.2.0
   google_fonts: ^6.2.1
-  syncfusion_flutter_calendar: ^30.1.42
-  animate_do: ^4.2.0
-  fl_chart: ^1.0.0
-  youtube_player_flutter: ^9.1.1
-  flutter_inappwebview_web: ^1.1.2
-  flutter_inappwebview: ^6.1.5
-  table_calendar: ^3.2.0
-  flutter_datetime_picker_plus: ^2.1.0
-  firebase_core: ^3.5.0
-  firebase_messaging: ^15.1.3
-  change_app_package_name: ^1.5.0
-  flutter_local_notifications: ^19.4.1
-  timezone: ^0.10.1
-  path_provider: ^2.1.3 
-  permission_handler: ^11.3.1 
-  device_info_plus: ^12.3.0
-  firebase_auth: ^5.7.0
-  intl_phone_field: ^3.2.0
-  google_sign_in: ^7.2.0
+  flutter_svg: ^2.0.10+1
+  lottie: ^3.1.2
   shimmer: ^3.0.0
-
+  animate_do: ^4.2.0
+  
+  # ========== CALENDAR & CHARTS ==========
+  table_calendar: ^3.1.1
+  syncfusion_flutter_calendar: ^25.2.5
+  fl_chart: ^0.68.0
+  
+  # ========== MEDIA ==========
+  youtube_player_flutter: ^9.0.1
+  cached_network_image: ^3.3.1
+  
+  # ========== WEBVIEW ==========
+  flutter_inappwebview: ^6.0.0
+  
+  # ========== FIREBASE ==========
+  firebase_core: ^3.5.0
+  firebase_auth: ^5.3.0
+  firebase_messaging: ^15.1.0
+  google_sign_in: ^6.2.1
+  
+  # ========== NOTIFICATIONS ==========
+  flutter_local_notifications: ^17.1.2
+  timezone: ^0.9.3
+  
+  # ========== FORMS & INPUT ==========
+  flutter_datetime_picker_plus: ^2.1.0
+  intl_phone_field: ^3.2.0
+  
+  # ========== UTILITIES ==========
+  device_info_plus: ^10.1.2
+  permission_handler: ^11.3.1
+  fluttertoast: ^8.2.5
+  change_app_package_name: ^1.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  
+  # Linting
+  flutter_lints: ^4.0.0
+  
+  # Build tools
+  flutter_native_splash: ^2.4.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+  
+  # Asset configuration - only include existing directories
+  assets:
+    # Will add assets when directories are created
+    # - assets/images/
+    # - assets/icons/
+    # - assets/animations/
+  
+  # Font configuration - comment out until fonts are added
+  # fonts:
+  #   - family: Poppins
+  #     fonts:
+  #       - asset: assets/fonts/Poppins-Regular.ttf
+  #         weight: 400
+
+# Splash screen configuration - comment out until images exist
+# flutter_native_splash:
+#   color: "#FFFFFF"
+#   image: assets/images/splash_logo.png
+#   color_dark: "#1A1A1A"
+#   image_dark: assets/images/splash_logo_dark.png
+#   android: true
+#   ios: true
+#   fullscreen: true
+
+# App icon configuration - comment out until icons exist
+# flutter_launcher_icons:
+#   android: true
+#   ios: true
+#   image_path: "assets/icons/app_icon.png"
+#   adaptive_icon_background: "#E91E63"
+#   adaptive_icon_foreground: "assets/icons/adaptive_icon.png"

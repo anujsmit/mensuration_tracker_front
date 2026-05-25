@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:mensurationhealthapp/config/config.dart';
-// Helper to parse color from a hex string (e.g., "#RRGGBB")
 Color _colorFromHex(String hexColor) {
   try {
     final hexCode = hexColor.replaceAll('#', '');
@@ -80,7 +79,7 @@ class NotificationItem {
 
 class UserNotificationProvider with ChangeNotifier {
   // Correct base URL for the notification routes inside the auth module
-  static const String _baseUrl = '${Config.apiAuthBaseUrl}/notification';
+  static const String _baseUrl =  '${Config.baseUrl}/notifications';
 
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;

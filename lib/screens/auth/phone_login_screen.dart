@@ -1,9 +1,11 @@
+// lib/screens/auth/phone_login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
-import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:mensurationhealthapp/providers/auth_provider.dart' as app_auth;
+import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
 
 class PhoneLoginScreen extends StatefulWidget {
   const PhoneLoginScreen({super.key});
@@ -14,81 +16,62 @@ class PhoneLoginScreen extends StatefulWidget {
 
 class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
   String _fullPhoneNumber = '';
   bool _isLoading = false;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<void> _verifyPhoneNumber() async { // Renamed from _requestOtp
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
     setState(() => _isLoading = true);
 
     try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: _fullPhoneNumber,
-        timeout: const Duration(seconds: 60),
-        // Handles OTP auto-retrieval
-        verificationCompleted: (PhoneAuthCredential credential) async {
-        },
-        // Handles failure
-        verificationFailed: (FirebaseAuthException e) {
-          if (mounted) {
-            Fluttertoast.showToast(
-              msg: e.message ?? 'Phone verification failed.',
-              toastLength: Toast.LENGTH_LONG,
-              backgroundColor: Theme.of(context).colorScheme.error,
-              textColor: Theme.of(context).colorScheme.onError,
-            );
-            setState(() => _isLoading = false);
-          }
-        },
-        // Handles code being sent; navigate to OTP screen
-        codeSent: (String verificationId, int? resendToken) {
-          if (mounted) {
-            Fluttertoast.showToast(
-              msg: 'OTP sent to $_fullPhoneNumber',
-              toastLength: Toast.LENGTH_LONG,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              textColor: Theme.of(context).colorScheme.onPrimary,
-            );
-            
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (ctx) => OtpVerificationScreen(
-                  identifier: _fullPhoneNumber,
-                  verificationId: verificationId,
-                  resendToken: resendToken,
-                ),
-              ),
-            );
-            setState(() => _isLoading = false);
-          }
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          
-        },
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+      
+      await authProvider.sendPhoneOtp(_phoneController.text.trim());
+
+      if (!mounted) return;
+
+      Fluttertoast.showToast(
+        msg: 'OTP sent to $_fullPhoneNumber',
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
       );
-    } catch (error) {
+
+      // Navigate to OTP verification screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (ctx) => OtpVerificationScreen(
+            phoneNumber: _fullPhoneNumber,
+          ),
+        ),
+      );
+
+    } catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: error.toString().replaceAll('Exception: ', ''),
-          toastLength: Toast.LENGTH_LONG,
-          gravity: ToastGravity.BOTTOM,
-          backgroundColor: Theme.of(context).colorScheme.error,
-          textColor: Theme.of(context).colorScheme.onError,
+          msg: e.toString().replaceAll('Exception: ', ''),
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
         );
       }
+    } finally {
       if (mounted) setState(() => _isLoading = false);
-    } 
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -117,7 +100,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                   delay: const Duration(milliseconds: 100),
                   child: Text(
                     'Phone Number Verification',
-                    style: textTheme.headlineMedium?.copyWith(
+                    style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -130,13 +113,14 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                   child: Text(
                     'Enter your phone number to receive a one-time password (OTP)',
                     textAlign: TextAlign.center,
-                    style: textTheme.bodyMedium,
+                    style: theme.textTheme.bodyMedium,
                   ),
                 ),
                 const SizedBox(height: 48),
                 FadeInLeft(
                   duration: const Duration(milliseconds: 700),
                   child: IntlPhoneField(
+                    controller: _phoneController,
                     decoration: InputDecoration(
                       labelText: 'Phone Number',
                       border: OutlineInputBorder(
@@ -154,7 +138,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                       if (value == null || value.number.isEmpty) { 
                         return 'Please enter your phone number';
                       }
-                      if (_fullPhoneNumber.length < 10) {
+                      if (value.number.length < 10) {
                         return 'Invalid phone number';
                       }
                       return null;
@@ -166,7 +150,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                   duration: const Duration(milliseconds: 700),
                   delay: const Duration(milliseconds: 450),
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _verifyPhoneNumber,
+                    onPressed: _isLoading ? null : _sendOtp,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: colorScheme.primary,
@@ -187,7 +171,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                           )
                         : Text(
                             'SEND OTP',
-                            style: textTheme.labelLarge?.copyWith(
+                            style: theme.textTheme.labelLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                           ),

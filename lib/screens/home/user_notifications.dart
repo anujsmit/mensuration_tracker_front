@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/notification_provider.dart';
+import 'package:intl/intl.dart'; // Add this import
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -28,9 +29,10 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   void _scrollListener() {
+    final provider = context.read<UserNotificationProvider>();
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 200 &&
-        !context.read<UserNotificationProvider>().isLoading) {
+        !provider.isLoading) {
       _loadMore();
     }
   }
