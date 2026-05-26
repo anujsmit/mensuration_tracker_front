@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,42 +8,86 @@ import 'providers/auth_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/ReportProvider.dart';
-import 'screens/auth/signup_screen.dart';
-import 'screens/auth/phone_login_screen.dart';
+
+import 'screens/auth/login_screen.dart';
 import 'screens/home/main_navigation_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ==========================================
-  // LOCK ORIENTATION
-  // ==========================================
+  try {
+    // ==========================================
+    // LOCK ORIENTATION
+    // ==========================================
 
-  await SystemChrome
-      .setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+    await SystemChrome
+        .setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
 
-  await dotenv.load(
-    fileName: ".env",
-  );
+    // ==========================================
+    // LOAD ENV
+    // ==========================================
 
-  // ==========================================
-  // INIT SUPABASE
-  // ==========================================
+    await dotenv.load(
+      fileName: ".env",
+    );
 
-  await Supabase.initialize(
-    url: dotenv.env[
-            'SUPABASE_URL'] ??
-        '',
+    // ==========================================
+    // GET ENV VALUES
+    // ==========================================
 
-    anonKey: dotenv.env[
-            'SUPABASE_ANON_KEY'] ??
-        '',
-  );
+    final supabaseUrl =
+        dotenv.env['SUPABASE_URL'];
 
-  runApp(const MyApp());
+    final supabaseAnonKey =
+        dotenv.env[
+            'SUPABASE_ANON_KEY'];
+
+    // ==========================================
+    // VALIDATE ENV
+    // ==========================================
+
+    if (supabaseUrl == null ||
+        supabaseUrl.isEmpty) {
+      throw Exception(
+        'SUPABASE_URL missing in .env',
+      );
+    }
+
+    if (supabaseAnonKey ==
+            null ||
+        supabaseAnonKey
+            .isEmpty) {
+      throw Exception(
+        'SUPABASE_ANON_KEY missing in .env',
+      );
+    }
+
+    // ==========================================
+    // INIT SUPABASE
+    // ==========================================
+
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+    );
+
+    runApp(const MyApp());
+
+  } catch (e) {
+    runApp(
+      ErrorApp(
+        error:
+            e.toString(),
+      ),
+    );
+  }
 }
+
+// ==========================================
+// MAIN APP
+// ==========================================
 
 class MyApp extends StatelessWidget {
   const MyApp({
@@ -82,7 +125,7 @@ class MyApp extends StatelessWidget {
             false,
 
         title:
-            'Menstrual Health App',
+            'Menstrual Health',
 
         theme: ThemeData(
           useMaterial3: true,
@@ -92,24 +135,14 @@ class MyApp extends StatelessWidget {
         ),
 
         home: const AuthWrapper(),
-
-        routes: {
-          '/login': (_) =>
-              const LoginScreen(),
-
-          '/signup': (_) =>
-              const SignupScreen(),
-
-          '/home': (_) =>
-              const MainNavigationScreen(),
-
-          '/phone': (_) =>
-              const PhoneLoginScreen(),
-        },
       ),
     );
   }
 }
+
+// ==========================================
+// AUTH WRAPPER
+// ==========================================
 
 class AuthWrapper
     extends StatelessWidget {
@@ -126,6 +159,10 @@ class AuthWrapper
         auth,
         child,
       ) {
+        // ======================================
+        // LOADING
+        // ======================================
+
         if (auth.isLoading) {
           return const Scaffold(
             body: Center(
@@ -135,12 +172,101 @@ class AuthWrapper
           );
         }
 
+        // ======================================
+        // LOGGED IN
+        // ======================================
+
         if (auth.isAuth) {
           return const MainNavigationScreen();
         }
 
+        // ======================================
+        // LOGIN
+        // ======================================
+
         return const LoginScreen();
       },
+    );
+  }
+}
+
+// ==========================================
+// ERROR APP
+// ==========================================
+
+class ErrorApp extends StatelessWidget {
+  final String error;
+
+  const ErrorApp({
+    super.key,
+    required this.error,
+  });
+
+  @override
+  Widget build(
+      BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner:
+          false,
+
+      home: Scaffold(
+        backgroundColor:
+            Colors.white,
+
+        body: Center(
+          child: Padding(
+            padding:
+                const EdgeInsets
+                    .all(24),
+
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment
+                      .center,
+
+              children: [
+                const Icon(
+                  Icons.error_outline,
+
+                  color: Colors.red,
+
+                  size: 80,
+                ),
+
+                const SizedBox(
+                    height: 20),
+
+                const Text(
+                  'Startup Error',
+
+                  style: TextStyle(
+                    fontSize: 24,
+
+                    fontWeight:
+                        FontWeight
+                            .bold,
+                  ),
+                ),
+
+                const SizedBox(
+                    height: 16),
+
+                Text(
+                  error,
+
+                  textAlign:
+                      TextAlign.center,
+
+                  style: const TextStyle(
+                    color:
+                        Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
