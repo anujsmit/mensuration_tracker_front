@@ -1,424 +1,566 @@
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+// lib/providers/profile_provider.dart
+
 import 'dart:typed_data';
-import 'package:mensurationhealthapp/config/config.dart';
+
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfileProvider with ChangeNotifier {
+  // ==========================================
+  // SUPABASE
+  // ==========================================
+
+  final supabase =
+      Supabase.instance.client;
+
+  // ==========================================
+  // STATE
+  // ==========================================
+
   Map<String, dynamic>? _profile;
+
   List<dynamic> _cycles = [];
+
   List<dynamic> _symptoms = [];
+
   bool _isVerified = false;
+
   String? _username;
+
   String? _email;
 
   String _error = '';
+
   bool _isLoading = false;
 
-  // FIX: Use the centralized API base URL and append the specific path
-  final String baseUrl = '${Config.apiAuthBaseUrl}/profile';
+  // ==========================================
+  // GETTERS
+  // ==========================================
 
-  Map<String, dynamic>? get profile => _profile;
-  List<dynamic> get cycles => _cycles;
-  List<dynamic> get symptoms => _symptoms;
-  bool get isVerified => _isVerified;
-  String? get username => _username;
-  String? get email => _email;
-  String get error => _error;
-  bool get isLoading => _isLoading;
+  Map<String, dynamic>? get profile =>
+      _profile;
 
+  List<dynamic> get cycles =>
+      _cycles;
 
+  List<dynamic> get symptoms =>
+      _symptoms;
 
-    void clearData() {
+  bool get isVerified =>
+      _isVerified;
+
+  String? get username =>
+      _username;
+
+  String? get email =>
+      _email;
+
+  String get error =>
+      _error;
+
+  bool get isLoading =>
+      _isLoading;
+
+  // ==========================================
+  // CLEAR DATA
+  // ==========================================
+
+  void clearData() {
     _profile = null;
+
     _cycles = [];
+
     _symptoms = [];
+
     _isVerified = false;
+
     _username = null;
+
     _email = null;
+
     _error = '';
+
     _isLoading = false;
+
     notifyListeners();
   }
-Future<bool> updateUsername(String userId, String username, String token) async {
-  _isLoading = true;
-  notifyListeners();
 
-  try {
-    final response = await http.put(
-      Uri.parse('${Config.apiAuthBaseUrl}/profile/username'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode({
-        'username': username,
-      }),
-    );
+  // ==========================================
+  // FETCH PROFILE
+  // ==========================================
 
-    if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
-      
-      if (responseData['status'] == 'success') {
-        _username = username;
-        
-        _error = '';
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = responseData['message'] ?? 'Failed to update username';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } else {
-      final responseData = json.decode(response.body);
-      _error = responseData['message'] ?? 
-               'Failed to update username. Status: ${response.statusCode}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  } catch (e) {
-    _error = 'Network error: ${e.toString()}';
-    _isLoading = false;
-    notifyListeners();
-    return false;
-  }
-}
-  Future<void> fetchProfile(String userId, String token) async {
+  Future<void> fetchProfile(
+    String userId,
+    String token,
+  ) async {
     _isLoading = true;
+
+    _error = '';
+
     notifyListeners();
 
     try {
-      final response = await http.get(
-        Uri.parse(baseUrl),
-        headers: {'Authorization': 'Bearer $token'},
-      );
+      final response =
+          await supabase
+              .from('profiles')
+              .select()
+              .eq('id', userId)
+              .maybeSingle();
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        _profile =
-            responseData['hasProfile'] == true ? responseData['profile'] : null;
-        _username = responseData['username'] ?? _username;
-        _email = responseData['email'] ?? _email;
+      _profile = response;
 
-        _error = '';
-      } else {
-        _error =
-            json.decode(response.body)['message'] ?? 'Failed to load profile';
-      }
+      _username =
+          response?['full_name'];
+
+      _email =
+          supabase.auth.currentUser
+              ?.email;
+
+      _isVerified =
+          supabase.auth.currentUser
+                  ?.emailConfirmedAt !=
+              null;
+
+      _error = '';
+
     } catch (e) {
-      _error = 'Network error: ${e.toString()}';
+      _error = e.toString();
+
+      debugPrint(
+        'Fetch profile error: $e',
+      );
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // UPDATE USERNAME
+  // ==========================================
+
+  Future<bool> updateUsername(
+    String userId,
+    String username,
+    String token,
+  ) async {
+    if (username.trim().isEmpty) {
+      _error =
+          'Username cannot be empty';
+
+      notifyListeners();
+
+      return false;
     }
 
-    _isLoading = false;
+    _isLoading = true;
+
+    _error = '';
+
     notifyListeners();
+
+    try {
+      await supabase
+          .from('profiles')
+          .update({
+        'full_name':
+            username.trim(),
+      }).eq('id', userId);
+
+      _username =
+          username.trim();
+
+      _error = '';
+
+      return true;
+
+    } catch (e) {
+      _error = e.toString();
+
+      return false;
+
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
+    }
   }
+
+  // ==========================================
+  // SAVE PROFILE
+  // ==========================================
 
   Future<bool> saveProfile(
-      Map<String, dynamic> profileData, String token) async {
+    Map<String, dynamic> profileData,
+    String token,
+  ) async {
     _isLoading = true;
+
+    _error = '';
+
     notifyListeners();
 
     try {
-      final Map<String, dynamic> requestBody = {
-        'age': profileData['age'],
-        'weight': profileData['weight'],
-        'height': profileData['height'],
-        'cycleLength': profileData['cycleLength'],
-        'lastPeriodDate': profileData['lastPeriodDate'],
-        'ageAtMenarche': profileData['ageAtMenarche'],
-        'flowRegularity': profileData['flowRegularity'],
-        'bleedingDuration': profileData['bleedingDuration'],
-        'flowAmount': profileData['flowAmount'],
-        'periodInterval': profileData['periodInterval'],
-      };
+      final userId =
+          supabase
+              .auth.currentUser!.id;
 
-      final response = await http.post(
-        Uri.parse(baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode(requestBody),
+      await supabase
+          .from('profiles')
+          .upsert({
+        'id': userId,
+
+        'full_name':
+            profileData[
+                    'full_name'] ??
+                _username,
+
+        'age':
+            profileData['age'],
+
+        'weight':
+            profileData['weight'],
+
+        'height':
+            profileData['height'],
+
+        'cycle_length':
+            profileData[
+                'cycleLength'],
+
+        'last_period_date':
+            profileData[
+                'lastPeriodDate'],
+
+        'age_at_menarche':
+            profileData[
+                'ageAtMenarche'],
+
+        'flow_regularity':
+            profileData[
+                'flowRegularity'],
+
+        'bleeding_duration':
+            profileData[
+                'bleedingDuration'],
+
+        'flow_amount':
+            profileData[
+                'flowAmount'],
+
+        'period_interval':
+            profileData[
+                'periodInterval'],
+
+        'updated_at':
+            DateTime.now()
+                .toIso8601String(),
+      });
+
+      await fetchProfile(
+        userId,
+        '',
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        // Get user ID from auth provider or response
-        final responseData = json.decode(response.body);
-        final userId = responseData['profile']?['user_id']?.toString() ??
-            profileData['user_id']?.toString() ??
-            '';
+      _error = '';
 
-        await fetchProfile(userId, token);
-        _error = '';
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error =
-            json.decode(response.body)['message'] ?? 'Failed to save profile';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
+      return true;
+
     } catch (e) {
-      _error = 'Network error: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
+      _error = e.toString();
+
+      debugPrint(
+        'Save profile error: $e',
+      );
+
       return false;
+
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
     }
   }
 
-  Future<Map<String, dynamic>?> getSummaryReport(String token) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/auth/reports/summary'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body)['data'];
-    }
-    return null;
-  }
+  // ==========================================
+  // FETCH CYCLES
+  // ==========================================
 
-// NEW: Method to download the health report
-  Future<Map<String, dynamic>> downloadHealthReport(String token) async {
+  Future<void> fetchCycles(
+    String userId,
+    String token,
+  ) async {
+    _isLoading = true;
+
+    _error = '';
+
+    notifyListeners();
+
     try {
-      // FIX: Use the correct reports endpoint instead of profile endpoint
-      final reportUrl = Uri.parse('${Config.apiAuthBaseUrl}/reports/health');
+      final response =
+          await supabase
+              .from('cycles')
+              .select()
+              .eq('user_id', userId)
+              .order(
+                'start_date',
+                ascending: false,
+              );
 
-      final response = await http.get(
-        reportUrl,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'text/csv, application/json',
-        },
-      ).timeout(const Duration(seconds: 60));
+      _cycles = response;
 
-      if (response.statusCode == 200) {
-        // Check content type
-        final contentType = response.headers['content-type'] ?? '';
+      _error = '';
 
-        // Extract filename from the Content-Disposition header
-        String? contentDisposition = response.headers['content-disposition'];
-        String filename = 'health_report.csv';
-        if (contentDisposition != null) {
-          // Simple parsing to get the filename
-          final match =
-              RegExp(r'filename="?([^"]+)"?').firstMatch(contentDisposition);
-          if (match != null) {
-            filename = match.group(1) ?? filename;
-          }
-        }
+    } catch (e) {
+      _error = e.toString();
 
-        // Handle both CSV and JSON responses
-        if (contentType.contains('csv')) {
-          return {
-            'success': true,
-            'data': response.bodyBytes,
-            'filename': filename,
-            'contentType': 'csv',
-          };
-        } else {
-          // Try to parse as JSON
-          try {
-            final responseData = json.decode(response.body);
-            if (responseData['success'] == false) {
-              return {
-                'success': false,
-                'message':
-                    responseData['message'] ?? 'Failed to generate report.',
-              };
-            }
-            return {
-              'success': true,
-              'data': Uint8List.fromList(utf8.encode(response.body)),
-              'filename': filename,
-              'contentType': 'json',
-            };
-          } catch (e) {
-            return {
-              'success': true,
-              'data': response.bodyBytes,
-              'filename': filename,
-              'contentType': 'text',
-            };
-          }
-        }
-      } else {
-        try {
-          final responseData = json.decode(response.body);
-          return {
-            'success': false,
-            'message': responseData['message'] ?? 'Failed to download report.',
-          };
-        } catch (e) {
-          return {
-            'success': false,
-            'message': 'Server error: ${response.statusCode}',
-          };
-        }
+      _cycles = [];
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // RECORD CYCLE
+  // ==========================================
+
+  Future<bool> recordCycle(
+    Map<String, dynamic> cycleData,
+    String token,
+  ) async {
+    _isLoading = true;
+
+    _error = '';
+
+    notifyListeners();
+
+    try {
+      final userId =
+          supabase
+              .auth.currentUser!.id;
+
+      await supabase
+          .from('cycles')
+          .insert({
+        'user_id': userId,
+
+        'start_date':
+            cycleData['startDate'],
+
+        'end_date':
+            cycleData['endDate'],
+
+        'notes':
+            cycleData['notes'] ??
+                '',
+      });
+
+      await fetchCycles(
+        userId,
+        '',
+      );
+
+      _error = '';
+
+      return true;
+
+    } catch (e) {
+      _error = e.toString();
+
+      return false;
+
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // FETCH SYMPTOMS
+  // ==========================================
+
+  Future<void> fetchSymptoms(
+    String userId,
+    String token, {
+    String? startDate,
+    String? endDate,
+    String? symptomType,
+  }) async {
+    _isLoading = true;
+
+    _error = '';
+
+    notifyListeners();
+
+    try {
+      dynamic query = supabase
+          .from('symptoms')
+          .select()
+          .eq('user_id', userId);
+
+      if (symptomType != null &&
+          symptomType.isNotEmpty) {
+        query = query.eq(
+          'symptom_type',
+          symptomType,
+        );
       }
+
+      final response =
+          await query.order(
+        'date',
+        ascending: false,
+      );
+
+      _symptoms = response;
+
+      _error = '';
+
+    } catch (e) {
+      _error = e.toString();
+
+      _symptoms = [];
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // RECORD SYMPTOM
+  // ==========================================
+
+  Future<bool> recordSymptom(
+    Map<String, dynamic> symptomData,
+    String token,
+  ) async {
+    _isLoading = true;
+
+    _error = '';
+
+    notifyListeners();
+
+    try {
+      final userId =
+          supabase
+              .auth.currentUser!.id;
+
+      await supabase
+          .from('symptoms')
+          .insert({
+        'user_id': userId,
+
+        'date':
+            symptomData['date'],
+
+        'symptom_type':
+            symptomData[
+                'symptomType'],
+
+        'severity':
+            symptomData[
+                'severity'],
+
+        'notes':
+            symptomData['notes'] ??
+                '',
+      });
+
+      await fetchSymptoms(
+        userId,
+        '',
+      );
+
+      _error = '';
+
+      return true;
+
+    } catch (e) {
+      _error = e.toString();
+
+      return false;
+
+    } finally {
+      _isLoading = false;
+
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // SUMMARY REPORT
+  // ==========================================
+
+  Future<Map<String, dynamic>?>
+      getSummaryReport(
+    String token,
+  ) async {
+    try {
+      return {
+        'profile': _profile,
+        'cycles_count':
+            _cycles.length,
+        'symptoms_count':
+            _symptoms.length,
+      };
+
+    } catch (e) {
+      debugPrint(
+        'Summary report error: $e',
+      );
+
+      return null;
+    }
+  }
+
+  // ==========================================
+  // DOWNLOAD HEALTH REPORT
+  // ==========================================
+
+  Future<Map<String, dynamic>>
+      downloadHealthReport(
+    String token,
+  ) async {
+    try {
+      final report = '''
+Health Report
+
+User: ${_username ?? 'Unknown'}
+
+Email: ${_email ?? 'Unknown'}
+
+Cycles Recorded: ${_cycles.length}
+
+Symptoms Recorded: ${_symptoms.length}
+
+Generated At:
+${DateTime.now()}
+''';
+
+      return {
+        'success': true,
+
+        'data':
+            Uint8List.fromList(
+          report.codeUnits,
+        ),
+
+        'filename':
+            'health_report.txt',
+
+        'contentType': 'text',
+      };
+
     } catch (e) {
       return {
         'success': false,
-        'message': 'Network error or timeout: ${e.toString()}',
+        'message': e.toString(),
       };
     }
-  }
-
-  Future<void> fetchCycles(String userId, String token) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/cycles'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        _cycles = json.decode(response.body)['data'];
-        _error = '';
-      } else {
-        _error =
-            json.decode(response.body)['message'] ?? 'Failed to load cycles';
-      }
-    } catch (e) {
-      _error = 'Network error: ${e.toString()}';
-    }
-
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<bool> recordCycle(Map<String, dynamic> cycleData, String token) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final Map<String, dynamic> requestBody = {
-        'startDate': cycleData['startDate'],
-        'endDate': cycleData['endDate'],
-        'notes': cycleData['notes'],
-        'timezone': cycleData['timezone'] ?? 'Asia/Kolkata',
-      };
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/cycles'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode(requestBody),
-      );
-
-      if (response.statusCode == 201) {
-        await fetchCycles(cycleData['userId'], token);
-        _error = '';
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error =
-            json.decode(response.body)['message'] ?? 'Failed to record cycle';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _error = 'Network error: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<void> fetchSymptoms(String userId, String token,
-      {String? startDate, String? endDate, String? symptomType}) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      String url = '$baseUrl/symptoms';
-      List<String> params = [];
-      if (startDate != null) params.add('startDate=$startDate');
-      if (endDate != null) params.add('endDate=$endDate');
-      if (symptomType != null) params.add('symptomType=$symptomType');
-
-      if (params.isNotEmpty) {
-        url += '?' + params.join('&');
-      }
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        _symptoms = json.decode(response.body)['data'];
-        _error = '';
-      } else {
-        _error =
-            json.decode(response.body)['message'] ?? 'Failed to load symptoms';
-      }
-    } catch (e) {
-      _error = 'Network error: ${e.toString()}';
-    }
-
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<bool> recordSymptom(
-      Map<String, dynamic> symptomData, String token) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final Map<String, dynamic> requestBody = {
-        'date': symptomData['date'],
-        'symptomType': symptomData['symptomType'],
-        'severity': symptomData['severity'],
-        'notes': symptomData['notes'],
-        'timezone': symptomData['timezone'] ?? 'Asia/Kolkata',
-        'cycleId': symptomData['cycleId'],
-      };
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/symptoms'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode(requestBody),
-      );
-
-      if (response.statusCode == 201) {
-        await fetchSymptoms(symptomData['userId'], token);
-        _error = '';
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error =
-            json.decode(response.body)['message'] ?? 'Failed to record symptom';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _error = 'Network error: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  void clearError() {
-    _error = '';
-    notifyListeners();
   }
 }

@@ -1,1302 +1,657 @@
+// lib/screens/home/profile.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/profile_provider.dart';
-import 'package:intl/intl.dart';
-import 'package:animate_do/animate_do.dart';
+
+import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({Key? key}) : super(key: key);
+  const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  State<ProfilePage> createState() =>
+      _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(_loadData);
-  }
+class _ProfilePageState
+    extends State<ProfilePage> {
+  final supabase =
+      Supabase.instance.client;
 
-  void _loadData() {
-    final authProvider = context.read<AuthProvider>();
-    final profileProvider = context.read<ProfileProvider>();
+  final _formKey =
+      GlobalKey<FormState>();
 
-    if (authProvider.isAuth && authProvider.token != null) {
-      profileProvider.fetchProfile(authProvider.userId!, authProvider.token!);
-    }
-  }
+  final _fullNameController =
+      TextEditingController();
 
-  bool _isProfileComplete(Map<String, dynamic>? profile) {
-    if (profile == null) return false;
+  final _ageController =
+      TextEditingController();
 
-    final requiredFields = [
-      'age',
-      'weight',
-      'height',
-      'cycle_length',
-      'last_period_date'
-    ];
-    final optionalFields = [
-      'age_at_menarche',
-      'flow_regularity',
-      'bleeding_duration',
-      'flow_amount'
-    ];
+  final _weightController =
+      TextEditingController();
 
-    for (var field in requiredFields) {
-      if (profile[field] == null) return false;
-    }
+  final _heightController =
+      TextEditingController();
 
-    final filledOptional =
-        optionalFields.where((field) => profile[field] != null).length;
+  final _cycleLengthController =
+      TextEditingController();
 
-    return filledOptional >= 2;
-  }
+  final _flowAmountController =
+      TextEditingController();
 
-  @override
-  Widget build(BuildContext context) {
-    final profileProvider = context.watch<ProfileProvider>();
-    final authProvider = context.watch<AuthProvider>();
-
-    if (profileProvider.isLoading && profileProvider.profile == null) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  Theme.of(context).colorScheme.primary,
-                ),
-                strokeWidth: 3,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Loading your profile...',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.7),
-                    ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final isProfileComplete = _isProfileComplete(profileProvider.profile);
-    final displayUsername =
-        authProvider.username ?? profileProvider.username ?? 'User';
-
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 0,
-        title: const Text(
-          'Profile',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => _showLogoutDialog(context),
-          ),
-        ],
-      ),
-      body: CustomScrollView(
-        slivers: [
-          // Profile Header Section
-          SliverToBoxAdapter(
-            child: Container(
-              height: 180,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.primaryContainer,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Profile Avatar
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.9),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 10,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.person_rounded,
-                            size: 40,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                        if (!isProfileComplete)
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.orange,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.warning_amber_rounded,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      displayUsername,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (!isProfileComplete)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.orange.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.info_outline_rounded,
-                              size: 16,
-                              color: Colors.orange,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Profile Incomplete',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.orange,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Content Area
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                // Complete Profile Banner (if incomplete)
-                if (!isProfileComplete)
-                  FadeInUp(
-                    duration: const Duration(milliseconds: 400),
-                    child: Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: Colors.orange.withOpacity(0.2),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.health_and_safety_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Complete Your Health Profile',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Add your health information to get personalized menstrual cycle insights and predictions.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.7),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.primary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                              onPressed: () {
-                                final profileProvider =
-                                    context.read<ProfileProvider>();
-                                final authProvider =
-                                    context.read<AuthProvider>();
-
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => _EditProfileDialog(
-                                    profileData: profileProvider.profile ?? {},
-                                    userId: authProvider.userId!,
-                                    token: authProvider.token!,
-                                  ),
-                                ).then((_) => _loadData());
-                              },
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.edit_rounded, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Complete Now',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Health Information Section
-                if (profileProvider.profile != null)
-                  FadeInUp(
-                    duration: const Duration(milliseconds: 500),
-                    child: Container(
-                      margin:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 12),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.medical_services_rounded,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Health Information',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Health Info Cards
-                          ..._buildHealthInfoCards(profileProvider.profile!),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Quick Actions Section
-                FadeInUp(
-                  duration: const Duration(milliseconds: 600),
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 12),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.dashboard_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Quick Actions',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.5,
-                          children: [
-                            _buildQuickActionCard(
-                              icon: Icons.calendar_today_rounded,
-                              title: 'Cycle Tracker',
-                              color: Colors.purple,
-                              onTap: () {
-                                // Navigate to cycle tracker
-                              },
-                            ),
-                            _buildQuickActionCard(
-                              icon: Icons.health_and_safety_rounded,
-                              title: 'Symptoms Log',
-                              color: Colors.green,
-                              onTap: () {
-                                // Navigate to symptoms
-                              },
-                            ),
-                            _buildQuickActionCard(
-                              icon: Icons.assessment_rounded,
-                              title: 'Health Report',
-                              color: Colors.orange,
-                              onTap: () {
-                                _downloadHealthReport(context);
-                              },
-                            ),
-                            _buildQuickActionCard(
-                              icon: Icons.notifications_rounded,
-                              title: 'Reminders',
-                              color: Colors.red,
-                              onTap: () {
-                                // Navigate to reminders
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Logout Button
-                FadeInUp(
-                  duration: const Duration(milliseconds: 700),
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .error
-                            .withOpacity(0.1),
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        minimumSize: const Size(double.infinity, 50),
-                      ),
-                      icon: const Icon(Icons.logout_rounded, size: 20),
-                      label: const Text(
-                        'Logout',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      onPressed: () => _showLogoutDialog(context),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ],
-      ),
-
-      // Edit Profile Floating Action Button
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Icon(Icons.edit_rounded, color: Colors.white),
-        onPressed: () {
-          final profileProvider = context.read<ProfileProvider>();
-          final authProvider = context.read<AuthProvider>();
-
-          if (authProvider.userId != null && authProvider.token != null) {
-            showDialog(
-              context: context,
-              builder: (context) => _EditProfileDialog(
-                profileData: profileProvider.profile ?? {},
-                userId: authProvider.userId!,
-                token: authProvider.token!,
-              ),
-            ).then((_) => _loadData());
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildQuickActionCard({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildHealthInfoCards(Map<String, dynamic> profile) {
-    final healthInfo = [
-      _buildHealthCard(
-        title: 'Age',
-        value: profile['age']?.toString() ?? 'Not set',
-        icon: Icons.cake_rounded,
-        color: Colors.blue,
-      ),
-      _buildHealthCard(
-        title: 'Weight & Height',
-        value:
-            '${profile['weight'] != null ? '${profile['weight']} kg' : 'Not set'} • ${profile['height'] != null ? '${profile['height']} cm' : 'Not set'}',
-        icon: Icons.monitor_weight_rounded,
-        color: Colors.green,
-      ),
-      _buildHealthCard(
-        title: 'Cycle Information',
-        value: profile['cycle_length'] != null
-            ? '${profile['cycle_length']} days'
-            : 'Not set',
-        icon: Icons.repeat_rounded,
-        color: Colors.purple,
-      ),
-      _buildHealthCard(
-        title: 'Last Period',
-        value: _formatDate(profile['last_period_date']),
-        icon: Icons.calendar_month_rounded,
-        color: Colors.orange,
-      ),
-      _buildHealthCard(
-        title: 'Age at Menarche',
-        value: profile['age_at_menarche'] != null
-            ? '${profile['age_at_menarche']} years'
-            : 'Not set',
-        icon: Icons.child_friendly_rounded,
-        color: Colors.pink,
-      ),
-      _buildHealthCard(
-        title: 'Flow Details',
-        value:
-            '${profile['flow_amount'] ?? 'Not set'} • ${profile['flow_regularity']?.toString().replaceAll('_', ' ') ?? 'Not set'}',
-        icon: Icons.water_drop_rounded,
-        color: Colors.teal,
-      ),
-      _buildHealthCard(
-        title: 'Bleeding Duration',
-        value: profile['bleeding_duration'] != null
-            ? '${profile['bleeding_duration']} days'
-            : 'Not set',
-        icon: Icons.timer_rounded,
-        color: Colors.red,
-      ),
-      _buildHealthCard(
-        title: 'Period Interval',
-        value: profile['period_interval'] != null
-            ? '${profile['period_interval']} days'
-            : 'Not set',
-        icon: Icons.schedule_rounded,
-        color: Colors.indigo,
-      ),
-    ];
-
-    return List.generate(
-      healthInfo.length,
-      (index) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: healthInfo[index],
-      ),
-    );
-  }
-
-  Widget _buildHealthCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: value == 'Not set'
-                          ? Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withOpacity(0.4)
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(dynamic date) {
-    if (date == null) return 'Not set';
-    try {
-      if (date is String) {
-        final parsedDate = DateTime.tryParse(date);
-        if (parsedDate != null) {
-          return DateFormat('MMM dd, yyyy').format(parsedDate);
-        }
-      }
-      return date.toString();
-    } catch (e) {
-      return 'Invalid date';
-    }
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await _logoutUser(context);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text(
-              'Logout',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _logoutUser(BuildContext context) async {
-    final authProvider = context.read<AuthProvider>();
-    final profileProvider = context.read<ProfileProvider>();
-
-    try {
-      // Clear profile data first
-      profileProvider.clearData();
-
-      // Logout from auth provider
-      await authProvider.signOut();
-
-      // Navigate to login screen
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-            context, '/login', (route) => false);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Logout error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _downloadHealthReport(BuildContext context) async {
-    final profileProvider = context.read<ProfileProvider>();
-    final authProvider = context.read<AuthProvider>();
-
-    final token = authProvider.token;
-
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please login again'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('Generating report...'),
-          ],
-        ),
-      ),
-    );
-
-    final result = await profileProvider.downloadHealthReport(token);
-
-    if (mounted) {
-      Navigator.pop(context);
-
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Report downloaded: ${result['filename']}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to download: ${result['message']}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-}
-
-class _EditProfileDialog extends StatefulWidget {
-  final Map<String, dynamic> profileData;
-  final String userId;
-  final String token;
-
-  const _EditProfileDialog({
-    required this.profileData,
-    required this.userId,
-    required this.token,
-  });
-
-  @override
-  State<_EditProfileDialog> createState() => __EditProfileDialogState();
-}
-
-class __EditProfileDialogState extends State<_EditProfileDialog> {
-  late final TextEditingController _ageController;
-  late final TextEditingController _weightController;
-  late final TextEditingController _heightController;
-  late final TextEditingController _cycleLengthController;
-  late final TextEditingController _lastPeriodDateController;
-  late final TextEditingController _ageAtMenarcheController;
-  late final TextEditingController _bleedingDurationController;
-  late final TextEditingController _periodIntervalController;
-  late String? _flowRegularity;
-  late String? _flowAmount;
-
-  final List<String> _flowRegularityOptions = [
-    'regular',
-    'usually_regular',
-    'usually_irregular',
-    'always_irregular',
-  ];
-  final List<String> _flowAmountOptions = ['Light', 'Moderate', 'Heavy'];
-  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeControllers();
-  }
-
-  void _initializeControllers() {
-    _ageController = TextEditingController(
-      text: widget.profileData['age']?.toString() ?? '',
-    );
-    _weightController = TextEditingController(
-      text: widget.profileData['weight']?.toString() ?? '',
-    );
-    _heightController = TextEditingController(
-      text: widget.profileData['height']?.toString() ?? '',
-    );
-    _cycleLengthController = TextEditingController(
-      text: widget.profileData['cycle_length']?.toString() ?? '',
-    );
-    _lastPeriodDateController = TextEditingController(
-      text: widget.profileData['last_period_date']?.toString() ?? '',
-    );
-    _ageAtMenarcheController = TextEditingController(
-      text: widget.profileData['age_at_menarche']?.toString() ?? '',
-    );
-    _bleedingDurationController = TextEditingController(
-      text: widget.profileData['bleeding_duration']?.toString() ?? '',
-    );
-    _periodIntervalController = TextEditingController(
-      text: widget.profileData['period_interval']?.toString() ?? '28',
-    );
-
-    _flowRegularity = widget.profileData['flow_regularity'] != null &&
-            _flowRegularityOptions.contains(
-              widget.profileData['flow_regularity'],
-            )
-        ? widget.profileData['flow_regularity']
-        : null;
-    _flowAmount = widget.profileData['flow_amount'] != null &&
-            _flowAmountOptions.contains(widget.profileData['flow_amount'])
-        ? widget.profileData['flow_amount']
-        : null;
+    _loadProfile();
   }
 
   @override
   void dispose() {
+    _fullNameController.dispose();
+
     _ageController.dispose();
+
     _weightController.dispose();
+
     _heightController.dispose();
+
     _cycleLengthController.dispose();
-    _lastPeriodDateController.dispose();
-    _ageAtMenarcheController.dispose();
-    _bleedingDurationController.dispose();
-    _periodIntervalController.dispose();
+
+    _flowAmountController.dispose();
+
     super.dispose();
   }
 
-  Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+  // ==========================================
+  // LOAD PROFILE
+  // ==========================================
 
-    final profileProvider = context.read<ProfileProvider>();
-
-    final profile = {
-      'age': int.tryParse(_ageController.text),
-      'weight': _weightController.text.isNotEmpty
-          ? double.tryParse(_weightController.text)
-          : null,
-      'height': _heightController.text.isNotEmpty
-          ? double.tryParse(_heightController.text)
-          : null,
-      'cycleLength': _cycleLengthController.text.isNotEmpty
-          ? int.tryParse(_cycleLengthController.text)
-          : null,
-      'lastPeriodDate': _lastPeriodDateController.text.isNotEmpty
-          ? _lastPeriodDateController.text
-          : null,
-      'ageAtMenarche': _ageAtMenarcheController.text.isNotEmpty
-          ? int.tryParse(_ageAtMenarcheController.text)
-          : null,
-      'flowRegularity': _flowRegularity,
-      'bleedingDuration': _bleedingDurationController.text.isNotEmpty
-          ? int.tryParse(_bleedingDurationController.text)
-          : null,
-      'flowAmount': _flowAmount,
-      'periodInterval': int.tryParse(_periodIntervalController.text) ?? 28,
-    };
-
+  Future<void> _loadProfile() async {
     try {
-      final success = await profileProvider.saveProfile(profile, widget.token);
-      if (success) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Profile updated successfully'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${profileProvider.error}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      final profileProvider =
+          Provider.of<ProfileProvider>(
+        context,
+        listen: false,
+      );
+
+      final user =
+          supabase.auth.currentUser;
+
+      if (user == null) return;
+
+      await profileProvider
+          .fetchProfile(
+        user.id,
+        '',
+      );
+
+      final profile =
+          profileProvider.profile;
+
+      if (profile != null) {
+        _fullNameController.text =
+            profile['full_name'] ??
+                '';
+
+        _ageController.text =
+            profile['age']
+                    ?.toString() ??
+                '';
+
+        _weightController.text =
+            profile['weight']
+                    ?.toString() ??
+                '';
+
+        _heightController.text =
+            profile['height']
+                    ?.toString() ??
+                '';
+
+        _cycleLengthController
+            .text = profile[
+                    'cycle_length']
+                ?.toString() ??
+            '';
+
+        _flowAmountController.text =
+            profile['flow_amount'] ??
+                '';
       }
+
+      setState(() {});
+
     } catch (e) {
-      if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      debugPrint(
+        'Profile load error: $e',
+      );
     }
   }
 
-  String? _validateAge(String? value) {
-    if (value == null || value.isEmpty) return 'Age is required';
-    final num = int.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 120) return 'Age must be 0-120';
-    return null;
+  // ==========================================
+  // SAVE PROFILE
+  // ==========================================
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!
+        .validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final profileProvider =
+          Provider.of<ProfileProvider>(
+        context,
+        listen: false,
+      );
+
+      final success =
+          await profileProvider
+              .saveProfile({
+        'full_name':
+            _fullNameController.text
+                .trim(),
+
+        'age': int.tryParse(
+          _ageController.text,
+        ),
+
+        'weight':
+            double.tryParse(
+          _weightController.text,
+        ),
+
+        'height':
+            double.tryParse(
+          _heightController.text,
+        ),
+
+        'cycleLength':
+            int.tryParse(
+          _cycleLengthController
+              .text,
+        ),
+
+        'flowAmount':
+            _flowAmountController
+                .text
+                .trim(),
+      }, '');
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Profile updated successfully',
+            ),
+
+            backgroundColor:
+                Colors.green,
+
+            behavior:
+                SnackBarBehavior
+                    .floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
+          SnackBar(
+            content: Text(
+              profileProvider.error,
+            ),
+
+            backgroundColor:
+                Colors.red,
+
+            behavior:
+                SnackBarBehavior
+                    .floating,
+          ),
+        );
+      }
+
+    } catch (e) {
+      debugPrint(
+        'Save profile error: $e',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
-  String? _validateWeight(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final num = double.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 500) return 'Weight must be 0-500 kg';
-    return null;
-  }
+  // ==========================================
+  // LOGOUT
+  // ==========================================
 
-  String? _validateHeight(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final num = double.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 300) return 'Height must be 0-300 cm';
-    return null;
-  }
+  Future<void> _logout() async {
+    final authProvider =
+        Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    );
 
-  String? _validateCycleLength(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final num = int.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 365) return 'Cycle length must be 0-365 days';
-    return null;
-  }
+    await authProvider.signOut();
 
-  String? _validateAgeAtMenarche(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final num = int.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 30) return 'Age at menarche must be 0-30';
-    return null;
-  }
+    if (!mounted) return;
 
-  String? _validateBleedingDuration(String? value) {
-    if (value == null || value.isEmpty) return null;
-    final num = int.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 30) return 'Bleeding duration must be 0-30 days';
-    return null;
-  }
-
-  String? _validatePeriodInterval(String? value) {
-    if (value == null || value.isEmpty) return 'Period interval is required';
-    final num = int.tryParse(value);
-    if (num == null) return 'Enter a valid number';
-    if (num < 0 || num > 365) return 'Period interval must be 0-365 days';
-    return null;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const LoginScreen(),
+      ),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: Theme.of(context).cardColor,
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
-          maxWidth: 450,
+    final theme = Theme.of(context);
+
+    final primaryColor =
+        theme.colorScheme.primary;
+
+    final user =
+        supabase.auth.currentUser;
+
+    return Scaffold(
+      backgroundColor:
+          const Color(0xFFF6F7FB),
+
+      appBar: AppBar(
+        elevation: 0,
+
+        backgroundColor:
+            Colors.transparent,
+
+        title: const Text(
+          'Profile',
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Edit Health Profile',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Update your health information',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withOpacity(0.6),
-                      ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        _buildNumberField(
-                          _ageController,
-                          'Age',
-                          Icons.cake_rounded,
-                          _validateAge,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNumberField(
-                          _weightController,
-                          'Weight (kg)',
-                          Icons.monitor_weight_rounded,
-                          _validateWeight,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNumberField(
-                          _heightController,
-                          'Height (cm)',
-                          Icons.height_rounded,
-                          _validateHeight,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNumberField(
-                          _cycleLengthController,
-                          'Cycle Length (days)',
-                          Icons.repeat_rounded,
-                          _validateCycleLength,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDateField(),
-                        const SizedBox(height: 12),
-                        _buildNumberField(
-                          _ageAtMenarcheController,
-                          'Age at Menarche',
-                          Icons.child_friendly_rounded,
-                          _validateAgeAtMenarche,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDropdownField(
-                          value: _flowRegularity,
-                          options: _flowRegularityOptions,
-                          label: 'Flow Regularity',
-                          icon: Icons.water_drop_rounded,
-                          onChanged: (value) =>
-                              setState(() => _flowRegularity = value),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNumberField(
-                          _bleedingDurationController,
-                          'Bleeding Duration (days)',
-                          Icons.timer_rounded,
-                          _validateBleedingDuration,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDropdownField(
-                          value: _flowAmount,
-                          options: _flowAmountOptions,
-                          label: 'Flow Amount',
-                          icon: Icons.opacity_rounded,
-                          onChanged: (value) =>
-                              setState(() => _flowAmount = value),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildNumberField(
-                          _periodIntervalController,
-                          'Period Interval (days)',
-                          Icons.schedule_rounded,
-                          _validatePeriodInterval,
-                        ),
-                      ],
-                    ),
+
+        actions: [
+          IconButton(
+            onPressed: _logout,
+
+            icon: const Icon(
+              Icons.logout,
+            ),
+          ),
+        ],
+      ),
+
+      body: SingleChildScrollView(
+        padding:
+            const EdgeInsets.all(20),
+
+        child: Form(
+          key: _formKey,
+
+          child: Column(
+            children: [
+              // ==========================
+              // PROFILE HEADER
+              // ==========================
+
+              Container(
+                width: double.infinity,
+
+                padding:
+                    const EdgeInsets.all(
+                        28),
+
+                decoration:
+                    BoxDecoration(
+                  gradient:
+                      LinearGradient(
+                    colors: [
+                      primaryColor,
+                      primaryColor
+                          .withOpacity(
+                              0.7),
+                    ],
                   ),
+
+                  borderRadius:
+                      BorderRadius.circular(
+                          28),
                 ),
-                const SizedBox(height: 24),
-                Row(
+
+                child: Column(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                    CircleAvatar(
+                      radius: 48,
+
+                      backgroundColor:
+                          Colors.white,
+
+                      child: Text(
+                        (_fullNameController
+                                    .text
+                                    .isNotEmpty
+                                ? _fullNameController
+                                    .text[0]
+                                : 'U')
+                            .toUpperCase(),
+
+                        style:
+                            TextStyle(
+                          fontSize: 36,
+                          fontWeight:
+                              FontWeight
+                                  .bold,
+
+                          color:
+                              primaryColor,
                         ),
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _saveProfile,
-                        child: const Text(
-                          'Save',
-                          style: TextStyle(color: Colors.white),
-                        ),
+
+                    const SizedBox(
+                        height: 18),
+
+                    Text(
+                      _fullNameController
+                              .text
+                              .isNotEmpty
+                          ? _fullNameController
+                              .text
+                          : 'User',
+
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.white,
+
+                        fontSize: 26,
+
+                        fontWeight:
+                            FontWeight
+                                .bold,
+                      ),
+                    ),
+
+                    const SizedBox(
+                        height: 8),
+
+                    Text(
+                      user?.email ??
+                          '',
+
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.white70,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+
+              const SizedBox(
+                  height: 28),
+
+              // ==========================
+              // FORM CARD
+              // ==========================
+
+              Container(
+                padding:
+                    const EdgeInsets.all(
+                        24),
+
+                decoration:
+                    BoxDecoration(
+                  color: Colors.white,
+
+                  borderRadius:
+                      BorderRadius.circular(
+                          28),
+
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black
+                          .withOpacity(
+                              0.04),
+
+                      blurRadius: 10,
+
+                      offset:
+                          const Offset(
+                              0, 5),
+                    ),
+                  ],
+                ),
+
+                child: Column(
+                  children: [
+                    _buildTextField(
+                      controller:
+                          _fullNameController,
+
+                      label:
+                          'Full Name',
+
+                      icon:
+                          Icons.person,
+                    ),
+
+                    _buildTextField(
+                      controller:
+                          _ageController,
+
+                      label: 'Age',
+
+                      icon:
+                          Icons.cake,
+
+                      keyboardType:
+                          TextInputType
+                              .number,
+                    ),
+
+                    _buildTextField(
+                      controller:
+                          _weightController,
+
+                      label:
+                          'Weight (kg)',
+
+                      icon:
+                          Icons.monitor_weight,
+
+                      keyboardType:
+                          TextInputType
+                              .number,
+                    ),
+
+                    _buildTextField(
+                      controller:
+                          _heightController,
+
+                      label:
+                          'Height (cm)',
+
+                      icon:
+                          Icons.height,
+
+                      keyboardType:
+                          TextInputType
+                              .number,
+                    ),
+
+                    _buildTextField(
+                      controller:
+                          _cycleLengthController,
+
+                      label:
+                          'Cycle Length',
+
+                      icon:
+                          Icons.calendar_month,
+
+                      keyboardType:
+                          TextInputType
+                              .number,
+                    ),
+
+                    _buildTextField(
+                      controller:
+                          _flowAmountController,
+
+                      label:
+                          'Flow Amount',
+
+                      icon:
+                          Icons.water_drop,
+                    ),
+
+                    const SizedBox(
+                        height: 30),
+
+                    SizedBox(
+                      width:
+                          double.infinity,
+
+                      height: 58,
+
+                      child:
+                          ElevatedButton(
+                        onPressed:
+                            _isLoading
+                                ? null
+                                : _saveProfile,
+
+                        style:
+                            ElevatedButton
+                                .styleFrom(
+                          backgroundColor:
+                              primaryColor,
+
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(
+                                    18),
+                          ),
+                        ),
+
+                        child: _isLoading
+                            ? const SizedBox(
+                                width:
+                                    24,
+                                height:
+                                    24,
+                                child:
+                                    CircularProgressIndicator(
+                                  color:
+                                      Colors.white,
+                                  strokeWidth:
+                                      2,
+                                ),
+                              )
+                            : const Text(
+                                'SAVE PROFILE',
+
+                                style:
+                                    TextStyle(
+                                  fontSize:
+                                      16,
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(
+                  height: 30),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildNumberField(
-    TextEditingController controller,
-    String label,
-    IconData icon,
-    String? Function(String?) validator,
-  ) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceVariant,
-      ),
-      keyboardType: TextInputType.number,
-      validator: validator,
-    );
-  }
+  // ==========================================
+  // TEXT FIELD
+  // ==========================================
 
-  Widget _buildDateField() {
-    return TextFormField(
-      controller: _lastPeriodDateController,
-      decoration: InputDecoration(
-        labelText: 'Last Period Date',
-        prefixIcon: Icon(
-          Icons.calendar_month_rounded,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceVariant,
-      ),
-      readOnly: true,
-      onTap: () async {
-        final date = await showDatePicker(
-          context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime.now(),
-        );
-        if (date != null) {
-          _lastPeriodDateController.text =
-              DateFormat('yyyy-MM-dd').format(date);
-        }
-      },
-    );
-  }
+  Widget _buildTextField({
+    required TextEditingController
+        controller,
 
-  Widget _buildDropdownField({
-    required String? value,
-    required List<String> options,
     required String label,
+
     required IconData icon,
-    required Function(String?) onChanged,
+
+    TextInputType keyboardType =
+        TextInputType.text,
   }) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceVariant,
+    return Padding(
+      padding:
+          const EdgeInsets.only(
+        bottom: 18,
       ),
-      items: options
-          .map(
-            (option) => DropdownMenuItem(
-              value: option,
-              child: Text(
-                option.replaceAll('_', ' '),
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: onChanged,
-      validator: (value) => value == null ? 'Please select an option' : null,
+
+      child: TextFormField(
+        controller: controller,
+
+        keyboardType:
+            keyboardType,
+
+        decoration: InputDecoration(
+          labelText: label,
+
+          prefixIcon:
+              Icon(icon),
+
+          filled: true,
+
+          fillColor:
+              const Color(
+                  0xFFF7F8FA),
+
+          border:
+              OutlineInputBorder(
+            borderRadius:
+                BorderRadius.circular(
+                    18),
+
+            borderSide:
+                BorderSide.none,
+          ),
+        ),
+
+        validator: (value) {
+          if (value == null ||
+              value.isEmpty) {
+            return 'Please enter $label';
+          }
+
+          return null;
+        },
+      ),
     );
   }
 }

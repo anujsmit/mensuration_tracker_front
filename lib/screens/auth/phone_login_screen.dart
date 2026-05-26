@@ -1,197 +1,452 @@
 // lib/screens/auth/phone_login_screen.dart
+
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import 'package:provider/provider.dart';
-import 'package:animate_do/animate_do.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
-import 'package:mensurationhealthapp/providers/auth_provider.dart' as app_auth;
+import 'package:provider/provider.dart';
+
+import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
 
 class PhoneLoginScreen extends StatefulWidget {
   const PhoneLoginScreen({super.key});
 
   @override
-  State<PhoneLoginScreen> createState() => _PhoneLoginScreenState();
+  State<PhoneLoginScreen> createState() =>
+      _PhoneLoginScreenState();
 }
 
-class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
-  String _fullPhoneNumber = '';
+class _PhoneLoginScreenState
+    extends State<PhoneLoginScreen> {
+  final _formKey =
+      GlobalKey<FormState>();
+
+  String _phoneNumber = '';
+
   bool _isLoading = false;
 
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
+  // ==========================================
+  // SEND OTP
+  // ==========================================
 
   Future<void> _sendOtp() async {
-    if (!_formKey.currentState!.validate()) return;
-    _formKey.currentState!.save();
+    if (!_formKey.currentState!
+        .validate()) {
+      return;
+    }
+
+    if (_phoneNumber.isEmpty) {
+      _showSnackBar(
+        'Please enter phone number',
+        Colors.red,
+      );
+
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
-      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
-      
-      await authProvider.sendPhoneOtp(_phoneController.text.trim());
+      final authProvider =
+          Provider.of<AuthProvider>(
+        context,
+        listen: false,
+      );
+
+      await authProvider.sendPhoneOtp(
+        _phoneNumber,
+      );
 
       if (!mounted) return;
 
-      Fluttertoast.showToast(
-        msg: 'OTP sent to $_fullPhoneNumber',
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
+      _showSnackBar(
+        'OTP sent successfully',
+        Colors.green,
       );
 
-      // Navigate to OTP verification screen
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (ctx) => OtpVerificationScreen(
-            phoneNumber: _fullPhoneNumber,
+          builder: (_) =>
+              OtpVerificationScreen(
+            phoneNumber:
+                _phoneNumber,
           ),
         ),
       );
 
     } catch (e) {
-      if (mounted) {
-        Fluttertoast.showToast(
-          msg: e.toString().replaceAll('Exception: ', ''),
-          backgroundColor: Colors.red,
-          textColor: Colors.white,
-        );
-      }
+      _showSnackBar(
+        e
+            .toString()
+            .replaceAll(
+                'Exception: ', ''),
+        Colors.red,
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(
+            () => _isLoading = false);
+      }
     }
+  }
+
+  // ==========================================
+  // SNACKBAR
+  // ==========================================
+
+  void _showSnackBar(
+    String message,
+    Color color,
+  ) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(message),
+
+        backgroundColor: color,
+
+        behavior:
+            SnackBarBehavior.floating,
+
+        shape: RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.circular(14),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+
+    final primaryColor =
+        theme.colorScheme.primary;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign in with Phone'),
-      ),
+      backgroundColor:
+          const Color(0xFFF6F7FB),
+
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding:
+              const EdgeInsets.all(24),
+
           child: Form(
             key: _formKey,
+
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment:
+                  CrossAxisAlignment
+                      .stretch,
+
               children: [
-                const SizedBox(height: 48),
-                FadeInDown(
-                  duration: const Duration(milliseconds: 500),
-                  child: Icon(
-                    Icons.phone_android,
-                    size: 80,
-                    color: colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                FadeInDown(
-                  duration: const Duration(milliseconds: 600),
-                  delay: const Duration(milliseconds: 100),
-                  child: Text(
-                    'Phone Number Verification',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                const SizedBox(
+                    height: 20),
+
+                // ==================================
+                // BACK BUTTON
+                // ==================================
+
+                Align(
+                  alignment:
+                      Alignment.centerLeft,
+
+                  child: IconButton(
+                    onPressed: () =>
+                        Navigator.pop(
+                            context),
+
+                    icon: const Icon(
+                      Icons
+                          .arrow_back_ios_new_rounded,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
-                const SizedBox(height: 12),
-                FadeInDown(
-                  duration: const Duration(milliseconds: 600),
-                  delay: const Duration(milliseconds: 200),
-                  child: Text(
-                    'Enter your phone number to receive a one-time password (OTP)',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-                const SizedBox(height: 48),
-                FadeInLeft(
-                  duration: const Duration(milliseconds: 700),
-                  child: IntlPhoneField(
-                    controller: _phoneController,
-                    decoration: InputDecoration(
-                      labelText: 'Phone Number',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(),
+
+                const SizedBox(
+                    height: 20),
+
+                // ==================================
+                // LOGO
+                // ==================================
+
+                Center(
+                  child: Container(
+                    height: 110,
+                    width: 110,
+
+                    decoration:
+                        BoxDecoration(
+                      gradient:
+                          LinearGradient(
+                        colors: [
+                          primaryColor,
+                          primaryColor
+                              .withOpacity(
+                                  0.7),
+                        ],
                       ),
-                      counterText: '',
+
+                      shape:
+                          BoxShape.circle,
+
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor
+                              .withOpacity(
+                                  0.3),
+
+                          blurRadius: 20,
+
+                          offset:
+                              const Offset(
+                                  0, 10),
+                        ),
+                      ],
                     ),
-                    initialCountryCode: 'IN',
-                    keyboardType: TextInputType.phone,
-                    onChanged: (phone) {
-                      _fullPhoneNumber = phone.completeNumber;
-                    },
-                    validator: (value) {
-                      if (value == null || value.number.isEmpty) { 
-                        return 'Please enter your phone number';
-                      }
-                      if (value.number.length < 10) {
-                        return 'Invalid phone number';
-                      }
-                      return null;
-                    },
+
+                    child: const Icon(
+                      Icons.phone_android,
+                      color: Colors.white,
+                      size: 50,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 32),
-                FadeInUp(
-                  duration: const Duration(milliseconds: 700),
-                  delay: const Duration(milliseconds: 450),
+
+                const SizedBox(
+                    height: 35),
+
+                // ==================================
+                // TITLE
+                // ==================================
+
+                Text(
+                  'Phone Login',
+
+                  textAlign:
+                      TextAlign.center,
+
+                  style: theme
+                      .textTheme
+                      .headlineMedium
+                      ?.copyWith(
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Text(
+                  'Enter your phone number to receive OTP',
+
+                  textAlign:
+                      TextAlign.center,
+
+                  style: TextStyle(
+                    color:
+                        Colors.grey.shade600,
+                    fontSize: 15,
+                  ),
+                ),
+
+                const SizedBox(
+                    height: 45),
+
+                // ==================================
+                // PHONE FIELD
+                // ==================================
+
+                IntlPhoneField(
+                  decoration:
+                      InputDecoration(
+                    hintText:
+                        'Phone Number',
+
+                    filled: true,
+
+                    fillColor:
+                        Colors.white,
+
+                    border:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                              18),
+
+                      borderSide:
+                          BorderSide.none,
+                    ),
+                  ),
+
+                  initialCountryCode:
+                      'NP',
+
+                  disableLengthCheck:
+                      false,
+
+                  dropdownIconPosition:
+                      IconPosition.trailing,
+
+                  onChanged: (phone) {
+                    _phoneNumber =
+                        phone.completeNumber;
+                  },
+
+                  validator: (value) {
+                    if (value == null ||
+                        value.number
+                            .isEmpty) {
+                      return 'Please enter phone number';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                    height: 30),
+
+                // ==================================
+                // SEND OTP BUTTON
+                // ==================================
+
+                SizedBox(
+                  height: 58,
+
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _sendOtp,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: colorScheme.primary,
-                      foregroundColor: colorScheme.onPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    onPressed:
+                        _isLoading
+                            ? null
+                            : _sendOtp,
+
+                    style:
+                        ElevatedButton
+                            .styleFrom(
+                      backgroundColor:
+                          primaryColor,
+
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                                18),
                       ),
-                      elevation: 0,
                     ),
+
                     child: _isLoading
-                        ? SizedBox(
+                        ? const SizedBox(
                             width: 24,
                             height: 24,
-                            child: CircularProgressIndicator(
-                              color: colorScheme.onPrimary,
-                              strokeWidth: 2,
+                            child:
+                                CircularProgressIndicator(
+                              color:
+                                  Colors.white,
+                              strokeWidth:
+                                  2,
                             ),
                           )
-                        : Text(
+                        : const Text(
                             'SEND OTP',
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+
+                            style:
+                                TextStyle(
+                              fontSize: 16,
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                FadeInUp(
-                  duration: const Duration(milliseconds: 700),
-                  delay: const Duration(milliseconds: 500),
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      'Go back to other sign-in options',
-                      style: TextStyle(
-                        color: colorScheme.secondary,
-                        fontWeight: FontWeight.w500,
+
+                const SizedBox(
+                    height: 35),
+
+                // ==================================
+                // INFO BOX
+                // ==================================
+
+                Container(
+                  padding:
+                      const EdgeInsets.all(
+                          18),
+
+                  decoration:
+                      BoxDecoration(
+                    color: Colors.white,
+
+                    borderRadius:
+                        BorderRadius.circular(
+                            20),
+
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors
+                            .black
+                            .withOpacity(
+                                0.03),
+
+                        blurRadius: 10,
+
+                        offset:
+                            const Offset(
+                                0, 5),
                       ),
-                    ),
+                    ],
+                  ),
+
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons
+                            .verified_user_outlined,
+
+                        color:
+                            primaryColor,
+
+                        size: 35,
+                      ),
+
+                      const SizedBox(
+                          height: 12),
+
+                      Text(
+                        'Secure Authentication',
+
+                        style: TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
+                          color:
+                              Colors.grey
+                                  .shade800,
+                          fontSize: 16,
+                        ),
+                      ),
+
+                      const SizedBox(
+                          height: 8),
+
+                      Text(
+                        'We use secure OTP verification powered by Supabase authentication.',
+
+                        textAlign:
+                            TextAlign.center,
+
+                        style: TextStyle(
+                          color: Colors
+                              .grey
+                              .shade600,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+
+                const SizedBox(
+                    height: 30),
               ],
             ),
           ),

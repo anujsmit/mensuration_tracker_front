@@ -78,8 +78,8 @@ class NotificationItem {
 }
 
 class UserNotificationProvider with ChangeNotifier {
-  // Correct base URL for the notification routes inside the auth module
-  static const String _baseUrl = '${Config.baseUrl}/notification';
+  // Correct base URL for the notification routes inside the auth mostatic 
+  String get baseUrl => '${Config.baseUrl}/notification';
 
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
@@ -118,7 +118,7 @@ class UserNotificationProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final uri = Uri.parse('$_baseUrl?page=$_currentPage&limit=$_perPage');
+      final uri = Uri.parse('$baseUrl?page=$_currentPage&limit=$_perPage');
       final response = await http.get(
         uri,
         headers: {
@@ -155,7 +155,7 @@ class UserNotificationProvider with ChangeNotifier {
 
   // Private helper to send "mark as read" requests to the backend
   Future<void> _markReadRequest(String token, List<String> ids) async {
-    final uri = Uri.parse('$_baseUrl/mark-read');
+    final uri = Uri.parse('$baseUrl/mark-read');
     final response = await http.post(
       uri,
       headers: {

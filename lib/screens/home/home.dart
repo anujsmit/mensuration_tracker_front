@@ -1,1655 +1,903 @@
+// lib/screens/home/home.dart
+
 import 'package:flutter/material.dart';
-import 'package:mensurationhealthapp/providers/auth_provider.dart';
-import 'package:mensurationhealthapp/screens/home/profile.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/providers/profile_provider.dart';
-import 'package:intl/intl.dart';
-import 'package:animate_do/animate_do.dart';
-import 'package:table_calendar/table_calendar.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:mensurationhealthapp/config/config.dart';
+import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
+import 'package:mensurationhealthapp/screens/home/profile.dart';
 
-class HomePage extends StatefulWidget {
-  final VoidCallback? onProfileTabRequested;
-
-  const HomePage({super.key, this.onProfileTabRequested});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomeScreen> createState() =>
+      _HomeScreenState();
 }
 
-class _HomePageState extends State<HomePage> {
-  CalendarFormat _calendarFormat = CalendarFormat.month;
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
-  Map<DateTime, List<Map<String, dynamic>>> _notes = {};
-  Map<DateTime, List<String>> _events = {};
-  bool _isDialogOpen = false; // Track if dialog is open
+class _HomeScreenState
+    extends State<HomeScreen> {
+  final supabase =
+      Supabase.instance.client;
+
+  Map<String, dynamic>? profile;
+
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _selectedDay = _focusedDay;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadCalendarData();
-    });
+    _loadData();
   }
 
-  void _loadCalendarData() {
-    final authProvider = context.read<AuthProvider>();
-    final profileProvider = context.read<ProfileProvider>();
+  // ==========================================
+  // LOAD USER DATA
+  // ==========================================
 
-    if (authProvider.isAuth && authProvider.token != null) {
-      _fetchCalendarData(authProvider.token!);
-    }
-  }
-
-  Future<void> _fetchCalendarData(String token) async {
+  Future<void> _loadData() async {
     try {
-      final now = DateTime.now();
-      final baseUrl = '${Config.apiAuthBaseUrl}/profile';
-      final response = await http.get(
-        Uri.parse(
-          '$baseUrl/calendar?year=${now.year}&month=${now.month.toString().padLeft(2, '0')}',
-        ),
-        headers: {'Authorization': 'Bearer $token'},
+      final authProvider =
+          Provider.of<AuthProvider>(
+        context,
+        listen: false,
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          final calendarData = data['data'];
-          setState(() {
-            // Parse notes
-            final notesList = calendarData['notes'] ?? [];
-            _notes = _parseCalendarNotes(notesList);
-
-            // Parse events
-            final eventsList = calendarData['events'] ?? [];
-            _events = _parseCalendarEvents(eventsList);
-          });
-          print('Calendar data loaded successfully');
-        } else {
-          print('Error in response: ${data['message']}');
-        }
-      } else {
-        print('Failed to load calendar data: ${response.statusCode}');
-      }
-    } catch (error) {
-      print('Error loading calendar data: $error');
-    }
-  }
-
-  Map<DateTime, List<Map<String, dynamic>>> _parseCalendarNotes(
-    List<dynamic> notes,
-  ) {
-    final Map<DateTime, List<Map<String, dynamic>>> result = {};
-
-    if (notes.isEmpty) return result;
-
-    for (var note in notes) {
-      try {
-        final dateStr = note['date'] ?? note['note_date'];
-        if (dateStr != null) {
-          final date = DateTime.parse(dateStr).toLocal();
-          final dateOnly = DateTime(date.year, date.month, date.day);
-
-          if (!result.containsKey(dateOnly)) {
-            result[dateOnly] = [];
-          }
-
-          result[dateOnly]!.add({
-            'content': note['content'] ?? '',
-            'mood': note['mood'] ?? 'Normal',
-            'id': note['id']?.toString(),
-            'updated_at': note['updated_at'],
-          });
-        }
-      } catch (e) {
-        print('Error parsing note: $e');
-      }
-    }
-    return result;
-  }
-
-  Map<DateTime, List<String>> _parseCalendarEvents(List<dynamic> events) {
-    final Map<DateTime, List<String>> result = {};
-
-    if (events.isEmpty) return result;
-
-    for (var event in events) {
-      try {
-        final dateStr = event['date'];
-        if (dateStr != null) {
-          final date = DateTime.parse(dateStr).toLocal();
-          final dateOnly = DateTime(date.year, date.month, date.day);
-
-          if (!result.containsKey(dateOnly)) {
-            result[dateOnly] = [];
-          }
-
-          final eventType = event['event'];
-          if (eventType != null) {
-            result[dateOnly]!.add(eventType);
-          }
-        }
-      } catch (e) {
-        print('Error parsing event: $e');
-      }
-    }
-    return result;
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchNotesForDate(
-    DateTime date,
-    String token,
-  ) async {
-    try {
-      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
-      final response = await http.get(
-        Uri.parse(
-          '$notesBaseUrl?date=${DateFormat('yyyy-MM-dd').format(date)}',
-        ),
-        headers: {'Authorization': 'Bearer $token'},
+      final profileProvider =
+          Provider.of<ProfileProvider>(
+        context,
+        listen: false,
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success' && data['data'] is List) {
-          return List<Map<String, dynamic>>.from(data['data']);
-        }
-      }
-      return [];
-    } catch (error) {
-      print('Error fetching notes: $error');
-      return [];
-    }
-  }
+      final user =
+          supabase.auth.currentUser;
 
-  void _showAddNoteDialog(BuildContext context, DateTime selectedDay) {
-    // Prevent opening multiple dialogs
-    if (_isDialogOpen) {
-      return;
-    }
+      if (user == null) {
+        if (!mounted) return;
 
-    _isDialogOpen = true;
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return _NoteDialog(
-          selectedDay: selectedDay,
-          onDismiss: () {
-            _isDialogOpen = false;
-          },
-          onNoteSaved: () {
-            setState(() {
-              _loadCalendarData();
-            });
-          },
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                const LoginScreen(),
+          ),
         );
-      },
-    ).then((value) {
-      // Dialog is closed
-      _isDialogOpen = false;
-    });
-  }
 
-  void _refreshCalendarEvents() {
-    final authProvider = context.read<AuthProvider>();
-    if (authProvider.isAuth && authProvider.token != null) {
-      _fetchCalendarData(authProvider.token!);
-    }
-  }
-
-  List<String> _getEventsForDay(DateTime day, CycleData? cycleData) {
-    final List<String> events = [];
-
-    // Add calendar events
-    final dateOnly = DateTime(day.year, day.month, day.day);
-    if (_events.containsKey(dateOnly)) {
-      events.addAll(_events[dateOnly]!);
-    }
-
-    // Add cycle events if we have cycle data
-    if (cycleData != null) {
-      final dayOfCycle = _calculateDayOfCycle(day, cycleData);
-
-      if (dayOfCycle <= cycleData.periodLength) {
-        if (!events.contains('Period')) events.add('Period');
+        return;
       }
 
-      if (dayOfCycle >= cycleData.fertileWindowStartDay &&
-          dayOfCycle <= cycleData.fertileWindowEndDay) {
-        if (!events.contains('Fertile')) events.add('Fertile');
-      }
+      await profileProvider
+          .fetchProfile(
+        user.id,
+        '',
+      );
 
-      if (dayOfCycle == cycleData.ovulationDay) {
-        if (!events.contains('Ovulation')) events.add('Ovulation');
-      }
+      setState(() {
+        profile =
+            profileProvider.profile;
+        isLoading = false;
+      });
+
+    } catch (e) {
+      debugPrint(
+        'Home load error: $e',
+      );
+
+      setState(() {
+        isLoading = false;
+      });
     }
-
-    // Add note indicator
-    if (_notes.containsKey(dateOnly) && _notes[dateOnly]!.isNotEmpty) {
-      if (!events.contains('Note')) events.add('Note');
-    }
-
-    return events;
   }
 
-  int _calculateDayOfCycle(DateTime day, CycleData cycleData) {
-    final now = DateTime.now();
-    final daysDifference = day.difference(now).inDays;
-    return (cycleData.currentDay + daysDifference - 1) % cycleData.cycleLength +
-        1;
+  // ==========================================
+  // LOGOUT
+  // ==========================================
+
+  Future<void> _logout() async {
+    try {
+      final authProvider =
+          Provider.of<AuthProvider>(
+        context,
+        listen: false,
+      );
+
+      await authProvider.signOut();
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              const LoginScreen(),
+        ),
+        (route) => false,
+      );
+
+    } catch (e) {
+      debugPrint(
+        'Logout error: $e',
+      );
+    }
+  }
+
+  // ==========================================
+  // CALCULATE NEXT PERIOD
+  // ==========================================
+
+  String calculateNextPeriod() {
+    try {
+      if (profile == null) {
+        return '--';
+      }
+
+      final lastPeriod =
+          profile![
+              'last_period_date'];
+
+      final cycleLength =
+          profile![
+                  'cycle_length'] ??
+              28;
+
+      if (lastPeriod == null) {
+        return '--';
+      }
+
+      final lastDate =
+          DateTime.parse(
+        lastPeriod.toString(),
+      );
+
+      final nextDate =
+          lastDate.add(
+        Duration(
+          days: cycleLength,
+        ),
+      );
+
+      return
+          '${nextDate.day}/${nextDate.month}/${nextDate.year}';
+
+    } catch (e) {
+      return '--';
+    }
+  }
+
+  // ==========================================
+  // DAYS LEFT
+  // ==========================================
+
+  int calculateDaysLeft() {
+    try {
+      if (profile == null) {
+        return 0;
+      }
+
+      final lastPeriod =
+          profile![
+              'last_period_date'];
+
+      final cycleLength =
+          profile![
+                  'cycle_length'] ??
+              28;
+
+      if (lastPeriod == null) {
+        return 0;
+      }
+
+      final lastDate =
+          DateTime.parse(
+        lastPeriod.toString(),
+      );
+
+      final nextDate =
+          lastDate.add(
+        Duration(
+          days: cycleLength,
+        ),
+      );
+
+      return nextDate
+          .difference(
+            DateTime.now(),
+          )
+          .inDays;
+
+    } catch (e) {
+      return 0;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final profileProvider = context.watch<ProfileProvider>();
-    final now = DateTime.now();
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
 
-    if (!authProvider.isAuth) {
-      Future.microtask(() => Navigator.pushReplacementNamed(context, '/login'));
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator(color: colors.primary)),
-      );
-    }
+    final primaryColor =
+        theme.colorScheme.primary;
 
-    if (profileProvider.isLoading && profileProvider.profile == null) {
-      return Scaffold(
-        backgroundColor: colors.surface,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: colors.primary),
-              const SizedBox(height: 20),
-              Text(
-                'Loading your cycle data...',
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colors.onSurface.withOpacity(0.7),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final authProvider =
+        Provider.of<AuthProvider>(
+      context,
+    );
 
-    if (profileProvider.error.isNotEmpty) {
-      return Scaffold(
-        backgroundColor: colors.surface,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 48, color: colors.error),
-                const SizedBox(height: 20),
-                Text(
-                  'Error loading data',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: colors.error,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  profileProvider.error,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurface.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                  ),
-                  onPressed: () => profileProvider.fetchProfile(
-                    authProvider.userId!,
-                    authProvider.token!,
-                  ),
-                  child: Text(
-                    'Try Again',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colors.onPrimary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (profileProvider.profile == null) {
-      return Scaffold(
-        backgroundColor: colors.surface,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.assignment_outlined,
-                  size: 48,
-                  color: colors.primary,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Complete your profile',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: colors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'We need some information to provide personalized insights',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurface.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                  ),
-                  onPressed: () {
-                    if (widget.onProfileTabRequested != null) {
-                      widget.onProfileTabRequested!();
-                    } else {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (ctx) => const ProfilePage(),
-                        ),
-                      );
-                    }
-                  },
-                  child: Text(
-                    'Set Up Profile',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colors.onPrimary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final cycleData = _calculateCycleData(profileProvider, now);
+    final user =
+        supabase.auth.currentUser;
 
     return Scaffold(
-      backgroundColor: colors.surface,
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await profileProvider.fetchProfile(
-            authProvider.userId!,
-            authProvider.token!,
-          );
-          _loadCalendarData();
-        },
-        color: colors.primary,
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.all(16.0),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  FadeInDown(child: _buildWelcomeCard(context, theme)),
-                  const SizedBox(height: 20),
-                  FadeInUp(
-                    child: _buildCalendarSection(cycleData, theme),
-                  ),
-                  const SizedBox(height: 20),
-                  FadeInUp(
-                    child: _buildCycleCountdownSection(cycleData, theme),
-                  ),
-                  const SizedBox(height: 20),
-                  FadeInUp(child: _buildCyclePhasesSection(cycleData, theme)),
-                  const SizedBox(height: 20),
-                  FadeInUp(
-                    child: _buildFertilityDetailsSection(cycleData, theme),
-                  ),
-                  const SizedBox(height: 20),
-                  FadeInUp(
-                    child: _buildHealthSummarySection(profileProvider, theme),
-                  ),
-                  const SizedBox(height: 20),
-                ]),
-              ),
-            ),
-          ],
+      backgroundColor:
+          const Color(0xFFF6F7FB),
+
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor:
+            Colors.transparent,
+
+        title: const Text(
+          'Menstrual Health',
         ),
+
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const ProfilePage(),
+                ),
+              );
+            },
+
+            icon: const Icon(
+              Icons.person_outline,
+            ),
+          ),
+
+          IconButton(
+            onPressed: _logout,
+
+            icon: const Icon(
+              Icons.logout,
+            ),
+          ),
+        ],
       ),
-    );
-  }
 
-  Widget _buildWelcomeCard(BuildContext context, ThemeData theme) {
-    final authProvider = context.watch<AuthProvider>();
-    final colors = theme.colorScheme;
+      body: isLoading
+          ? const Center(
+              child:
+                  CircularProgressIndicator(),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadData,
 
-    return Card(
-      elevation: 2,
-      shadowColor: colors.shadow.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: colors.surfaceVariant,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [colors.primary, colors.primaryContainer],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.primary.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Icon(Icons.person, size: 30, color: colors.onPrimary),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Hello, ${authProvider.username ?? 'there'}!",
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: colors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    DateFormat('EEEE, MMMM d').format(DateTime.now()),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurface.withOpacity(0.7),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              child:
+                  SingleChildScrollView(
+                physics:
+                    const AlwaysScrollableScrollPhysics(),
 
-  Widget _buildCycleCountdownSection(CycleData data, ThemeData theme) {
-    final colors = theme.colorScheme;
-    final daysUntilNextPeriod = data.cycleLength - data.currentDay;
-    final daysUntilFertile = data.fertileWindowStartDay - data.currentDay;
-    final isFertile = data.currentDay >= data.fertileWindowStartDay &&
-        data.currentDay <= data.fertileWindowEndDay;
+                padding:
+                    const EdgeInsets.all(
+                        20),
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
-            "Cycle Countdown",
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colors.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          elevation: 2,
-          shadowColor: colors.shadow.withOpacity(0.1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: colors.surfaceVariant,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                _buildCountdownItem(
-                  icon: Icons.water_drop,
-                  label: "Next Period",
-                  days: daysUntilNextPeriod,
-                  date: data.nextPeriodDate,
-                  color: colors.primary,
-                  theme: theme,
-                ),
-                const Divider(height: 20),
-                if (isFertile)
-                  _buildCountdownItem(
-                    icon: Icons.favorite,
-                    label: "Fertile Window Ends",
-                    days: data.fertileWindowEndDay - data.currentDay,
-                    color: colors.secondary,
-                    theme: theme,
-                  )
-                else
-                  _buildCountdownItem(
-                    icon: Icons.favorite,
-                    label: "Next Fertile Window",
-                    days: daysUntilFertile,
-                    color: colors.secondary,
-                    theme: theme,
-                  ),
-                const Divider(height: 20),
-                _buildCountdownItem(
-                  icon: Icons.egg,
-                  label: "Next Ovulation",
-                  days: data.ovulationDay > data.currentDay
-                      ? data.ovulationDay - data.currentDay
-                      : (data.cycleLength - data.currentDay) +
-                          data.ovulationDay,
-                  color: colors.tertiary,
-                  theme: theme,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
 
-  Widget _buildCountdownItem({
-    required IconData icon,
-    required String label,
-    required int days,
-    String? date,
-    required Color color,
-    required ThemeData theme,
-  }) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 20, color: color),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.8),
-                ),
-              ),
-              if (date != null)
-                Text(
-                  date,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            "$days ${days == 1 ? 'day' : 'days'}",
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+                  children: [
+                    // ==========================
+                    // HEADER
+                    // ==========================
 
-  Widget _buildCalendarSection(CycleData cycleData, ThemeData theme) {
-    final colors = theme.colorScheme;
+                    Container(
+                      width:
+                          double.infinity,
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
-            "Cycle Calendar",
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colors.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          elevation: 2,
-          shadowColor: colors.shadow.withOpacity(0.1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: colors.surfaceVariant,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                TableCalendar(
-                  firstDay: DateTime.now().subtract(const Duration(days: 365)),
-                  lastDay: DateTime.now().add(const Duration(days: 365)),
-                  focusedDay: _focusedDay,
-                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                  calendarFormat: _calendarFormat,
-                  onFormatChanged: (format) {
-                    setState(() {
-                      _calendarFormat = format;
-                    });
-                  },
-                  onDaySelected: (selectedDay, focusedDay) {
-                    // Prevent reopening if already selected
-                    if (_selectedDay != selectedDay) {
-                      setState(() {
-                        _selectedDay = selectedDay;
-                        _focusedDay = focusedDay;
-                      });
-                    }
+                      padding:
+                          const EdgeInsets
+                              .all(24),
 
-                    // Always show dialog on click
-                    _showAddNoteDialog(context, selectedDay);
-                  },
-                  onPageChanged: (focusedDay) {
-                    setState(() {
-                      _focusedDay = focusedDay;
-                    });
-                    _refreshCalendarEvents();
-                  },
-                  calendarStyle: CalendarStyle(
-                    todayDecoration: BoxDecoration(
-                      color: colors.primary.withOpacity(0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    selectedDecoration: BoxDecoration(
-                      color: colors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    markerDecoration: BoxDecoration(
-                      color: colors.secondary,
-                      shape: BoxShape.circle,
-                    ),
-                    outsideDaysVisible: false,
-                  ),
-                  headerStyle: HeaderStyle(
-                    formatButtonVisible: false,
-                    titleCentered: true,
-                  ),
-                  eventLoader: (day) => _getEventsForDay(day, cycleData),
-                ),
-                const SizedBox(height: 16),
-                _buildCalendarLegend(theme),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCalendarLegend(ThemeData theme) {
-    final colors = theme.colorScheme;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildLegendItem(colors.primary, 'Period', theme),
-        _buildLegendItem(colors.secondary, 'Fertile', theme),
-        _buildLegendItem(colors.tertiary, 'Ovulation', theme),
-        _buildLegendItem(colors.primaryContainer, 'Note', theme),
-      ],
-    );
-  }
-
-  Widget _buildLegendItem(Color color, String text, ThemeData theme) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCyclePhasesSection(CycleData data, ThemeData theme) {
-    final colors = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
-            "Cycle Phases",
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colors.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.4,
-          children: [
-            _buildPhaseCard(
-              title: "Menstruation",
-              days: "Day 1-${data.periodLength}",
-              icon: Icons.water_drop,
-              color: colors.primary,
-              isActive: data.currentDay <= data.periodLength,
-              theme: theme,
-            ),
-            _buildPhaseCard(
-              title: "Fertile Window",
-              days:
-                  "Day ${data.fertileWindowStartDay}-${data.fertileWindowEndDay}",
-              icon: Icons.favorite,
-              color: colors.secondary,
-              isActive: data.currentDay >= data.fertileWindowStartDay &&
-                  data.currentDay <= data.fertileWindowEndDay,
-              theme: theme,
-            ),
-            _buildPhaseCard(
-              title: "Ovulation",
-              days: "Day ${data.ovulationDay}",
-              icon: Icons.egg,
-              color: colors.tertiary,
-              isActive: data.currentDay == data.ovulationDay,
-              theme: theme,
-            ),
-            _buildPhaseCard(
-              title: "Luteal Phase",
-              days: "Day ${data.ovulationDay + 1}-${data.cycleLength}",
-              icon: Icons.mood,
-              color: colors.primaryContainer,
-              isActive: data.currentDay > data.fertileWindowEndDay,
-              theme: theme,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPhaseCard({
-    required String title,
-    required String days,
-    required IconData icon,
-    required Color color,
-    required bool isActive,
-    required ThemeData theme,
-  }) {
-    return Card(
-      elevation: isActive ? 4 : 1,
-      shadowColor: color.withOpacity(0.2),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isActive
-              ? color.withOpacity(0.3)
-              : theme.colorScheme.outline.withOpacity(0.1),
-        ),
-      ),
-      color: isActive
-          ? color.withOpacity(0.1)
-          : theme.colorScheme.surfaceVariant.withOpacity(0.5),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(isActive ? 0.2 : 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: color.withOpacity(isActive ? 1 : 0.7),
-              ),
-            ),
-            const Spacer(),
-            Text(
-              title,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: isActive
-                    ? theme.colorScheme.onSurface
-                    : theme.colorScheme.onSurface.withOpacity(0.8),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              days,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: isActive
-                    ? theme.colorScheme.onSurface.withOpacity(0.8)
-                    : theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFertilityDetailsSection(CycleData data, ThemeData theme) {
-    final colors = theme.colorScheme;
-    final isFertile = data.currentDay >= data.fertileWindowStartDay &&
-        data.currentDay <= data.fertileWindowEndDay;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
-            "Fertility Details",
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colors.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          elevation: 2,
-          shadowColor: colors.shadow.withOpacity(0.1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: colors.surfaceVariant,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildFertilityDetailItem(
-                  label: "Fertile Window",
-                  value:
-                      "Days ${data.fertileWindowStartDay}-${data.fertileWindowEndDay}",
-                  highlight: isFertile,
-                  theme: theme,
-                ),
-                const Divider(height: 20),
-                _buildFertilityDetailItem(
-                  label: "Ovulation Day",
-                  value: "Day ${data.ovulationDay}",
-                  highlight: data.currentDay == data.ovulationDay,
-                  theme: theme,
-                ),
-                const Divider(height: 20),
-                _buildFertilityDetailItem(
-                  label: "Today's Conception Chance",
-                  value:
-                      "${_getConceptionProbability(data.currentDay, data.ovulationDay)}%",
-                  highlight: isFertile,
-                  theme: theme,
-                ),
-                if (isFertile) ...[
-                  const Divider(height: 20),
-                  _buildFertilityDetailItem(
-                    label: "Best Days for Conception",
-                    value: "Days ${data.ovulationDay - 2}-${data.ovulationDay}",
-                    highlight: true,
-                    theme: theme,
-                  ),
-                ],
-                const Divider(height: 20),
-                _buildFertilityDetailItem(
-                  label: "Next Fertile Window Starts",
-                  value: _calculateNextFertileWindowStart(data),
-                  theme: theme,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFertilityDetailItem({
-    required String label,
-    required String value,
-    bool highlight = false,
-    required ThemeData theme,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: highlight
-                ? theme.colorScheme.secondary
-                : theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHealthSummarySection(
-    ProfileProvider profileProvider,
-    ThemeData theme,
-  ) {
-    final colors = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text(
-            "Health Summary",
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colors.onSurface,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          elevation: 2,
-          shadowColor: colors.shadow.withOpacity(0.1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: colors.surfaceVariant,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                _buildHealthItem(
-                  icon: Icons.cake,
-                  label: "Age",
-                  value:
-                      profileProvider.profile!['age']?.toString() ?? 'Not set',
-                  theme: theme,
-                ),
-                const Divider(height: 20),
-                _buildHealthItem(
-                  icon: Icons.fitness_center,
-                  label: "Weight",
-                  value: profileProvider.profile!['weight'] != null
-                      ? '${profileProvider.profile!['weight']} kg'
-                      : 'Not set',
-                  theme: theme,
-                ),
-                const Divider(height: 20),
-                _buildHealthItem(
-                  icon: Icons.height,
-                  label: "Height",
-                  value: profileProvider.profile!['height'] != null
-                      ? '${profileProvider.profile!['height']} cm'
-                      : 'Not set',
-                  theme: theme,
-                ),
-                const Divider(height: 20),
-                _buildHealthItem(
-                  icon: Icons.repeat,
-                  label: "Cycle Length",
-                  value: profileProvider.profile!['cycle_length'] != null
-                      ? '${profileProvider.profile!['cycle_length']} days'
-                      : 'Not set',
-                  theme: theme,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHealthItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required ThemeData theme,
-  }) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 20,
-          color: theme.colorScheme.onSurface.withOpacity(0.6),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            label,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _calculateNextFertileWindowStart(CycleData data) {
-    final nextCycleStart = DateTime.now().add(
-      Duration(days: data.cycleLength - data.currentDay + 1),
-    );
-    final nextFertileStart = nextCycleStart.add(
-      Duration(days: data.fertileWindowStartDay - 1),
-    );
-    return DateFormat('MMM dd').format(nextFertileStart);
-  }
-
-  CycleData _calculateCycleData(ProfileProvider profileProvider, DateTime now) {
-    final lastPeriodDate = profileProvider.profile?['last_period_date'] != null
-        ? DateTime.parse(profileProvider.profile!['last_period_date'])
-        : now.subtract(const Duration(days: 14));
-    final cycleLength = profileProvider.profile?['cycle_length'] ?? 28;
-    final periodLength = profileProvider.profile?['bleeding_duration'] ?? 5;
-
-    final currentDay = now.difference(lastPeriodDate).inDays + 1;
-    final ovulationDay = (cycleLength - 14).clamp(1, cycleLength);
-    final fertileWindowStartDay = (ovulationDay - 5).clamp(1, cycleLength);
-    final fertileWindowEndDay = (ovulationDay + 1).clamp(1, cycleLength);
-
-    return CycleData(
-      currentDay: currentDay,
-      cycleLength: cycleLength,
-      periodLength: periodLength,
-      ovulationDay: ovulationDay,
-      fertileWindowStartDay: fertileWindowStartDay,
-      fertileWindowEndDay: fertileWindowEndDay,
-      nextPeriodDate: DateFormat(
-        'MMM dd',
-      ).format(lastPeriodDate.add(Duration(days: cycleLength))),
-      lastPeriodDate: DateFormat('MMM dd').format(lastPeriodDate),
-    );
-  }
-
-  double _getConceptionProbability(int currentDay, int ovulationDay) {
-    final dayRelativeToOvulation = currentDay - ovulationDay;
-    switch (dayRelativeToOvulation) {
-      case -5:
-        return 10.0;
-      case -4:
-        return 15.0;
-      case -3:
-        return 20.0;
-      case -2:
-        return 27.5;
-      case -1:
-        return 32.5;
-      case 0:
-        return 32.5;
-      case 1:
-        return 12.5;
-      default:
-        return 0.0;
-    }
-  }
-}
-
-// Separate NoteDialog widget to prevent multiple dialog issues
-class _NoteDialog extends StatefulWidget {
-  final DateTime selectedDay;
-  final VoidCallback onDismiss;
-  final VoidCallback onNoteSaved;
-
-  const _NoteDialog({
-    required this.selectedDay,
-    required this.onDismiss,
-    required this.onNoteSaved,
-  });
-
-  @override
-  State<_NoteDialog> createState() => __NoteDialogState();
-}
-
-class __NoteDialogState extends State<_NoteDialog> {
-  late TextEditingController _noteController;
-  late TextEditingController _padsController;
-  late TextEditingController _periodNotesController;
-  String? _selectedMood;
-  String? _periodIntensity;
-  bool _isPeriodDay = false;
-  int _padsUsed = 0;
-  String? _editingNoteId;
-  List<Map<String, dynamic>> _previousNotes = [];
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _noteController = TextEditingController();
-    _padsController = TextEditingController();
-    _periodNotesController = TextEditingController();
-    _selectedMood = 'Normal';
-    _periodIntensity = 'medium';
-    _loadExistingNotes();
-  }
-
-  @override
-  void dispose() {
-    _noteController.dispose();
-    _padsController.dispose();
-    _periodNotesController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadExistingNotes() async {
-    final authProvider = context.read<AuthProvider>();
-    final token = authProvider.token;
-
-    if (token == null) return;
-
-    try {
-      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
-      final response = await http.get(
-        Uri.parse(
-          '$notesBaseUrl?date=${DateFormat('yyyy-MM-dd').format(widget.selectedDay)}',
-        ),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success' && data['data'] is List) {
-          setState(() {
-            _previousNotes = List<Map<String, dynamic>>.from(data['data']);
-
-            // Pre-fill with first note if exists
-            if (_previousNotes.isNotEmpty) {
-              final firstNote = _previousNotes.first;
-              _editingNoteId = firstNote['id']?.toString();
-              _noteController.text = firstNote['content'] ?? '';
-              _selectedMood = firstNote['mood'] ?? 'Normal';
-              _isPeriodDay = firstNote['is_period_day'] ?? false;
-              _padsUsed = firstNote['pads_used'] ?? 0;
-              _padsController.text = _padsUsed.toString();
-              _periodIntensity = firstNote['period_intensity'] ?? 'medium';
-              _periodNotesController.text = firstNote['period_notes'] ?? '';
-            }
-          });
-        }
-      }
-    } catch (error) {
-      print('Error loading notes: $error');
-    }
-  }
-
-  Future<void> _saveNote() async {
-    if (_noteController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a note'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final authProvider = context.read<AuthProvider>();
-      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
-      final url = _editingNoteId != null
-          ? '$notesBaseUrl/$_editingNoteId'
-          : notesBaseUrl;
-      final method = _editingNoteId != null ? http.put : http.post;
-
-      final response = await method(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${authProvider.token}',
-        },
-        body: json.encode({
-          'date': DateFormat('yyyy-MM-dd').format(widget.selectedDay),
-          'content': _noteController.text.trim(),
-          'mood': _selectedMood,
-          'isPeriodDay': _isPeriodDay,
-          'padsUsed': _isPeriodDay ? _padsUsed : 0,
-          'periodIntensity': _isPeriodDay ? _periodIntensity : null,
-          'periodNotes':
-              _isPeriodDay ? _periodNotesController.text.trim() : null,
-        }),
-      );
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = json.decode(response.body);
-        if (responseData['status'] == 'success') {
-          widget.onNoteSaved();
-          Navigator.of(context).pop();
-        } else {
-          throw Exception(responseData['message'] ?? 'Failed to save note');
-        }
-      } else {
-        final errorData = json.decode(response.body);
-        throw Exception(errorData['message'] ?? 'Failed to save note');
-      }
-    } catch (error) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${error.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _deleteNote() async {
-    if (_editingNoteId == null) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final authProvider = context.read<AuthProvider>();
-      final notesBaseUrl = '${Config.apiAuthBaseUrl}/notes';
-      final response = await http.delete(
-        Uri.parse('$notesBaseUrl/$_editingNoteId'),
-        headers: {
-          'Authorization': 'Bearer ${authProvider.token}',
-        },
-      );
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (response.statusCode == 200) {
-        widget.onNoteSaved();
-        Navigator.of(context).pop();
-      } else {
-        final errorData = json.decode(response.body);
-        throw Exception(errorData['message'] ?? 'Failed to delete note');
-      }
-    } catch (error) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${error.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    return AlertDialog(
-      elevation: 4,
-      shadowColor: colors.shadow.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(
-        _editingNoteId != null
-            ? 'Edit Note for ${DateFormat('MMM dd, yyyy').format(widget.selectedDay)}'
-            : 'Add Note for ${DateFormat('MMM dd, yyyy').format(widget.selectedDay)}',
-        style: theme.textTheme.titleLarge,
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  TextField(
-                    controller: _noteController,
-                    decoration: InputDecoration(
-                      labelText: 'Note',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedMood,
-                    decoration: InputDecoration(
-                      labelText: 'Mood',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    items: [
-                      'Happy',
-                      'Sad',
-                      'Anxious',
-                      'Energetic',
-                      'Tired',
-                      'Normal',
-                    ].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedMood = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  CheckboxListTile(
-                    title: const Text('This is a period day'),
-                    value: _isPeriodDay,
-                    onChanged: (value) {
-                      setState(() {
-                        _isPeriodDay = value ?? false;
-                        if (!_isPeriodDay) {
-                          _padsUsed = 0;
-                          _padsController.text = '0';
-                          _periodIntensity = 'medium';
-                          _periodNotesController.clear();
-                        }
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                    activeColor: colors.primary,
-                  ),
-                  if (_isPeriodDay) ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _padsController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Pads Used',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      decoration:
+                          BoxDecoration(
+                        gradient:
+                            LinearGradient(
+                          colors: [
+                            primaryColor,
+                            primaryColor
+                                .withOpacity(
+                                    0.7),
+                          ],
                         ),
+
+                        borderRadius:
+                            BorderRadius.circular(
+                                28),
                       ),
-                      onChanged: (value) {
-                        _padsUsed = int.tryParse(value) ?? 0;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _periodIntensity,
-                      decoration: InputDecoration(
-                        labelText: 'Period Intensity',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      items: [
-                        'light',
-                        'medium',
-                        'heavy',
-                      ].map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value.capitalize()),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _periodIntensity = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _periodNotesController,
-                      decoration: InputDecoration(
-                        labelText: 'Period Notes',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      maxLines: 2,
-                    ),
-                  ],
-                  if (_previousNotes.isNotEmpty &&
-                      _previousNotes.length > 1) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Other Notes for this Date',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ..._previousNotes.sublist(1).map(
-                          (note) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _editingNoteId = note['id']?.toString();
-                                  _noteController.text = note['content'] ?? '';
-                                  _selectedMood = note['mood'];
-                                  _isPeriodDay = note['is_period_day'] ?? false;
-                                  _padsUsed = note['pads_used'] ?? 0;
-                                  _padsController.text = _padsUsed.toString();
-                                  _periodIntensity =
-                                      note['period_intensity'] ?? 'medium';
-                                  _periodNotesController.text =
-                                      note['period_notes'] ?? '';
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(12.0),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color:
-                                        _editingNoteId == note['id']?.toString()
-                                            ? colors.primary
-                                            : colors.outline.withOpacity(0.2),
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  color: colors.surfaceVariant,
+
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+
+                        children: [
+                          Text(
+                            'Hello 👋',
+
+                            style:
+                                TextStyle(
+                              color: Colors
+                                  .white
+                                  .withOpacity(
+                                      0.9),
+
+                              fontSize:
+                                  18,
+                            ),
+                          ),
+
+                          const SizedBox(
+                              height: 8),
+
+                          Text(
+                            profile?[
+                                    'full_name'] ??
+                                user?.email ??
+                                'User',
+
+                            style:
+                                const TextStyle(
+                              color:
+                                  Colors
+                                      .white,
+
+                              fontSize:
+                                  28,
+
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
+                            ),
+                          ),
+
+                          const SizedBox(
+                              height: 20),
+
+                          Container(
+                            padding:
+                                const EdgeInsets
+                                    .all(
+                                        16),
+
+                            decoration:
+                                BoxDecoration(
+                              color: Colors
+                                  .white
+                                  .withOpacity(
+                                      0.15),
+
+                              borderRadius:
+                                  BorderRadius.circular(
+                                      20),
+                            ),
+
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons
+                                      .favorite,
+
+                                  color: Colors
+                                      .white,
+
+                                  size: 30,
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Note: ${note['content'] ?? 'No content'}',
-                                      style:
-                                          theme.textTheme.bodyMedium?.copyWith(
-                                        color:
-                                            colors.onSurface.withOpacity(0.8),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Mood: ${note['mood'] ?? 'Not set'}',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color:
-                                            colors.onSurface.withOpacity(0.6),
-                                      ),
-                                    ),
-                                    if (note['is_period_day'] ?? false) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Pads Used: ${note['pads_used'] ?? 0}',
+
+                                const SizedBox(
+                                    width:
+                                        14),
+
+                                Expanded(
+                                  child:
+                                      Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment
+                                            .start,
+
+                                    children: [
+                                      const Text(
+                                        'Next Period',
+
                                         style:
-                                            theme.textTheme.bodySmall?.copyWith(
+                                            TextStyle(
                                           color:
-                                              colors.onSurface.withOpacity(0.6),
+                                              Colors.white70,
                                         ),
                                       ),
+
+                                      const SizedBox(
+                                          height:
+                                              4),
+
                                       Text(
-                                        'Intensity: ${note['period_intensity'] ?? 'None'}',
+                                        calculateNextPeriod(),
+
                                         style:
-                                            theme.textTheme.bodySmall?.copyWith(
+                                            const TextStyle(
                                           color:
-                                              colors.onSurface.withOpacity(0.6),
-                                        ),
-                                      ),
-                                      Text(
-                                        'Period Notes: ${note['period_notes'] ?? ''}',
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color:
-                                              colors.onSurface.withOpacity(0.6),
+                                              Colors.white,
+
+                                          fontSize:
+                                              20,
+
+                                          fontWeight:
+                                              FontWeight.bold,
                                         ),
                                       ),
                                     ],
-                                    if (note['updated_at'] != null)
-                                      Text(
-                                        'Updated: ${DateFormat('MMM dd, yyyy, hh:mm a').format(DateTime.parse(note['updated_at']))}',
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color:
-                                              colors.onSurface.withOpacity(0.6),
-                                        ),
-                                      ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(
+                        height: 28),
+
+                    // ==========================
+                    // STATS
+                    // ==========================
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child:
+                              _buildStatCard(
+                            title:
+                                'Cycle Length',
+
+                            value:
+                                '${profile?['cycle_length'] ?? 28} days',
+
+                            icon:
+                                Icons.calendar_month,
+
+                            color:
+                                Colors.pink,
+                          ),
                         ),
+
+                        const SizedBox(
+                            width: 16),
+
+                        Expanded(
+                          child:
+                              _buildStatCard(
+                            title:
+                                'Days Left',
+
+                            value:
+                                '${calculateDaysLeft()}',
+
+                            icon:
+                                Icons.timelapse,
+
+                            color:
+                                Colors.purple,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(
+                        height: 28),
+
+                    // ==========================
+                    // HEALTH SUMMARY
+                    // ==========================
+
+                    Text(
+                      'Health Summary',
+
+                      style: theme
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(
+                        height: 16),
+
+                    Container(
+                      width:
+                          double.infinity,
+
+                      padding:
+                          const EdgeInsets
+                              .all(20),
+
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            Colors.white,
+
+                        borderRadius:
+                            BorderRadius.circular(
+                                24),
+
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors
+                                .black
+                                .withOpacity(
+                                    0.04),
+
+                            blurRadius:
+                                10,
+
+                            offset:
+                                const Offset(
+                                    0, 5),
+                          ),
+                        ],
+                      ),
+
+                      child: Column(
+                        children: [
+                          _buildInfoRow(
+                            'Age',
+                            '${profile?['age'] ?? '--'}',
+                          ),
+
+                          _buildInfoRow(
+                            'Weight',
+                            '${profile?['weight'] ?? '--'} kg',
+                          ),
+
+                          _buildInfoRow(
+                            'Height',
+                            '${profile?['height'] ?? '--'} cm',
+                          ),
+
+                          _buildInfoRow(
+                            'Flow Amount',
+                            '${profile?['flow_amount'] ?? '--'}',
+                          ),
+
+                          _buildInfoRow(
+                            'Regularity',
+                            '${profile?['flow_regularity'] ?? '--'}',
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(
+                        height: 28),
+
+                    // ==========================
+                    // QUICK ACTIONS
+                    // ==========================
+
+                    Text(
+                      'Quick Actions',
+
+                      style: theme
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(
+                        height: 16),
+
+                    GridView.count(
+                      crossAxisCount: 2,
+
+                      shrinkWrap: true,
+
+                      physics:
+                          const NeverScrollableScrollPhysics(),
+
+                      crossAxisSpacing:
+                          16,
+
+                      mainAxisSpacing:
+                          16,
+
+                      childAspectRatio:
+                          1.15,
+
+                      children: [
+                        _buildActionCard(
+                          title:
+                              'Profile',
+
+                          icon:
+                              Icons.person,
+
+                          color:
+                              Colors.blue,
+
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const ProfilePage(),
+                              ),
+                            );
+                          },
+                        ),
+
+                        _buildActionCard(
+                          title:
+                              'Track Cycle',
+
+                          icon:
+                              Icons.favorite,
+
+                          color:
+                              Colors.pink,
+
+                          onTap: () {},
+                        ),
+
+                        _buildActionCard(
+                          title:
+                              'Symptoms',
+
+                          icon:
+                              Icons.health_and_safety,
+
+                          color:
+                              Colors.green,
+
+                          onTap: () {},
+                        ),
+
+                        _buildActionCard(
+                          title:
+                              'Reports',
+
+                          icon:
+                              Icons.analytics,
+
+                          color:
+                              Colors.orange,
+
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(
+                        height: 30),
                   ],
-                ],
+                ),
               ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isLoading
-              ? null
-              : () {
-                  widget.onDismiss();
-                  Navigator.of(context).pop();
-                },
-          child: const Text('Cancel'),
-        ),
-        if (_editingNoteId != null)
-          TextButton(
-            onPressed: _isLoading ? null : _deleteNote,
-            child: Text('Delete', style: TextStyle(color: colors.error)),
-          ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _saveNote,
-          child: Text(_editingNoteId != null ? 'Update' : 'Save'),
-        ),
-      ],
+            ),
     );
   }
-}
 
-extension StringExtension on String {
-  String capitalize() {
-    return "${this[0].toUpperCase()}${substring(1)}";
+  // ==========================================
+  // STAT CARD
+  // ==========================================
+
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding:
+          const EdgeInsets.all(20),
+
+      decoration: BoxDecoration(
+        color: Colors.white,
+
+        borderRadius:
+            BorderRadius.circular(24),
+
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black
+                .withOpacity(0.04),
+
+            blurRadius: 10,
+
+            offset:
+                const Offset(0, 5),
+          ),
+        ],
+      ),
+
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+
+        children: [
+          Container(
+            padding:
+                const EdgeInsets.all(
+                    10),
+
+            decoration: BoxDecoration(
+              color:
+                  color.withOpacity(0.1),
+
+              borderRadius:
+                  BorderRadius.circular(
+                      14),
+            ),
+
+            child: Icon(
+              icon,
+              color: color,
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          Text(
+            title,
+
+            style: TextStyle(
+              color:
+                  Colors.grey.shade600,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            value,
+
+            style:
+                const TextStyle(
+              fontSize: 22,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
-}
 
-class CycleData {
-  final int currentDay;
-  final int cycleLength;
-  final int periodLength;
-  final int ovulationDay;
-  final int fertileWindowStartDay;
-  final int fertileWindowEndDay;
-  final String nextPeriodDate;
-  final String lastPeriodDate;
+  // ==========================================
+  // INFO ROW
+  // ==========================================
 
-  CycleData({
-    required this.currentDay,
-    required this.cycleLength,
-    required this.periodLength,
-    required this.ovulationDay,
-    required this.fertileWindowStartDay,
-    required this.fertileWindowEndDay,
-    required this.nextPeriodDate,
-    required this.lastPeriodDate,
-  });
+  Widget _buildInfoRow(
+    String label,
+    String value,
+  ) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(
+        vertical: 12,
+      ),
+
+      child: Row(
+        mainAxisAlignment:
+            MainAxisAlignment
+                .spaceBetween,
+
+        children: [
+          Text(
+            label,
+
+            style: TextStyle(
+              color:
+                  Colors.grey.shade700,
+            ),
+          ),
+
+          Text(
+            value,
+
+            style:
+                const TextStyle(
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // ACTION CARD
+  // ==========================================
+
+  Widget _buildActionCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius:
+          BorderRadius.circular(24),
+
+      onTap: onTap,
+
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+
+          borderRadius:
+              BorderRadius.circular(
+                  24),
+
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black
+                  .withOpacity(0.04),
+
+              blurRadius: 10,
+
+              offset:
+                  const Offset(0, 5),
+            ),
+          ],
+        ),
+
+        child: Column(
+          mainAxisAlignment:
+              MainAxisAlignment.center,
+
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.all(
+                      16),
+
+              decoration:
+                  BoxDecoration(
+                color: color
+                    .withOpacity(0.1),
+
+                shape:
+                    BoxShape.circle,
+              ),
+
+              child: Icon(
+                icon,
+                color: color,
+                size: 32,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Text(
+              title,
+
+              style:
+                  const TextStyle(
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

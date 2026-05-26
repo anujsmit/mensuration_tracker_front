@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:mensurationhealthapp/providers/auth_provider.dart';
 import 'package:mensurationhealthapp/screens/home/home.dart';
 import 'package:mensurationhealthapp/screens/home/learn.dart';
 import 'package:mensurationhealthapp/screens/home/profile.dart';
-import 'package:mensurationhealthapp/screens/home/user_notifications.dart';
 import 'package:mensurationhealthapp/screens/home/reports.dart';
-import 'package:provider/provider.dart';
-
-import 'package:mensurationhealthapp/providers/auth_provider.dart';
+import 'package:mensurationhealthapp/screens/home/user_notifications.dart';
 
 class MainNavigationScreen
     extends StatefulWidget {
@@ -32,9 +31,14 @@ class _MainNavigationScreenState
   final List<Widget> _pages =
       const [
     HomeScreen(),
+
+
     LearnPage(),
+
     NotificationPage(),
+
     Reports(),
+
     ProfilePage(),
   ];
 
@@ -171,9 +175,6 @@ class _MainNavigationScreenState
 
             unselectedItemColor:
                 Colors.grey.shade500,
-
-            showUnselectedLabels:
-                true,
 
             selectedLabelStyle:
                 const TextStyle(

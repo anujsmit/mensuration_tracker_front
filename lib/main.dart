@@ -1,93 +1,146 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:google_sign_in/google_sign_in.dart'; // ← Add this import
-import 'package:mensurationhealthapp/screens/auth/otp_verification_screen.dart';
-import 'package:mensurationhealthapp/screens/auth/phone_login_screen.dart';
-import 'package:provider/provider.dart';
-import 'firebase_options.dart';
-import 'package:mensurationhealthapp/providers/admin_notification_provider.dart';
-import 'package:mensurationhealthapp/providers/auth_provider.dart';
-import 'package:mensurationhealthapp/providers/notification_provider.dart';
-import 'package:mensurationhealthapp/providers/profile_provider.dart';
-import 'package:mensurationhealthapp/providers/user_provider.dart';
-import 'package:mensurationhealthapp/providers/ReportProvider.dart';
-
-import 'package:mensurationhealthapp/screens/home/admin/navbar_admin.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mensurationhealthapp/screens/auth/login_screen.dart';
-import 'package:mensurationhealthapp/screens/auth/signup_screen.dart';
-import 'package:mensurationhealthapp/screens/home/HomeScreen.dart';
-import 'package:mensurationhealthapp/screens/home/profile.dart';
-import 'package:mensurationhealthapp/screens/splash_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'app_theme.dart';
+import 'providers/auth_provider.dart';
+import 'providers/profile_provider.dart';
+import 'providers/notification_provider.dart';
+import 'providers/ReportProvider.dart';
+import 'screens/auth/signup_screen.dart';
+import 'screens/auth/phone_login_screen.dart';
+import 'screens/home/main_navigation_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock orientation (good practice — keep it)
-  await SystemChrome.setPreferredOrientations([
+  // ==========================================
+  // LOCK ORIENTATION
+  // ==========================================
+
+  await SystemChrome
+      .setPreferredOrientations([
     DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
   ]);
 
-  // 1. Initialize Firebase (you already have this)
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+  await dotenv.load(
+    fileName: ".env",
   );
 
-  // 2. Initialize Google Sign-In — REQUIRED in v7.0.0+
-  //    Call this exactly once, early in app startup
-  try {
-    await GoogleSignIn.instance.initialize(
-      // clientId: kIsWeb || Platform.isIOS ? 'your-ios-or-web-client-id' : null,
-      // serverClientId: 'your-backend-server-client-id-if-using-offline-access',
-      // scopes: ['email', 'profile'],   // ← usually not needed here anymore
-    );
-    debugPrint('Google Sign-In initialized successfully');
-  } catch (e) {
-    debugPrint('Failed to initialize Google Sign-In: $e');
-    // Optionally: show error to user or fallback to email login only
-  }
+  // ==========================================
+  // INIT SUPABASE
+  // ==========================================
+
+  await Supabase.initialize(
+    url: dotenv.env[
+            'SUPABASE_URL'] ??
+        '',
+
+    anonKey: dotenv.env[
+            'SUPABASE_ANON_KEY'] ??
+        '',
+  );
 
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({
+    super.key,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ProfileProvider()),
-        ChangeNotifierProvider(create: (_) => UserNotificationProvider()),
-        ChangeNotifierProvider(create: (_) => UserProvider()),
-        ChangeNotifierProvider(create: (_) => AdminNotificationProvider()),
-        ChangeNotifierProvider(create: (_) => ReportProvider()),
+        ChangeNotifierProvider(
+          create: (_) =>
+              AuthProvider(),
+        ),
+
+        ChangeNotifierProvider(
+          create: (_) =>
+              ProfileProvider(),
+        ),
+
+        ChangeNotifierProvider(
+          create: (_) =>
+              UserNotificationProvider(),
+        ),
+
+        ChangeNotifierProvider(
+          create: (_) =>
+              ReportProvider(),
+        ),
       ],
+
       child: MaterialApp(
-        title: 'Menstrual Health App',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        home: const SplashScreen(),
+        debugShowCheckedModeBanner:
+            false,
+
+        title:
+            'Menstrual Health App',
+
+        theme: ThemeData(
+          useMaterial3: true,
+
+          colorSchemeSeed:
+              Colors.pink,
+        ),
+
+        home: const AuthWrapper(),
+
         routes: {
-          '/login': (context) => const LoginScreen(),
-          '/signup': (context) => const SignupScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/profile': (context) => const ProfilePage(),
-          '/admin': (context) => const NavbarAdmin(),
-          '/phone': (context) => const PhoneLoginScreen(),
-        },
-        builder: (context, child) {
-          return MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
-            child: child!,
-          );
+          '/login': (_) =>
+              const LoginScreen(),
+
+          '/signup': (_) =>
+              const SignupScreen(),
+
+          '/home': (_) =>
+              const MainNavigationScreen(),
+
+          '/phone': (_) =>
+              const PhoneLoginScreen(),
         },
       ),
+    );
+  }
+}
+
+class AuthWrapper
+    extends StatelessWidget {
+  const AuthWrapper({
+    super.key,
+  });
+
+  @override
+  Widget build(
+      BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (
+        context,
+        auth,
+        child,
+      ) {
+        if (auth.isLoading) {
+          return const Scaffold(
+            body: Center(
+              child:
+                  CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (auth.isAuth) {
+          return const MainNavigationScreen();
+        }
+
+        return const LoginScreen();
+      },
     );
   }
 }

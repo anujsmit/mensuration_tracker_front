@@ -65,7 +65,7 @@ class UserProvider with ChangeNotifier {
   int get totalUsers => _totalUsers;
   int get currentPage => _currentPage;
 
-  static const String _baseUrl = '${Config.apiAuthBaseUrl}/users';
+  static final String _baseUrl = '${Config.apiAuthBaseUrl}/users';
   void reset() {
     _users = [];
     _currentPage = 1;
