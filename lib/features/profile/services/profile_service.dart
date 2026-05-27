@@ -1,100 +1,152 @@
-// ======================================================
-// FILE:
-// lib/features/profile/services/profile_service.dart
-// ======================================================
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:dio/dio.dart';
-
-import '../../../core/network/dio_client.dart';
+import '../models/profile_model.dart';
 
 class ProfileService {
 
-  // ======================================================
-  // DIO
-  // ======================================================
-
-  final Dio dio =
-      DioClient().dio;
+  final supabase =
+      Supabase.instance.client;
 
   // ======================================================
   // GET PROFILE
   // ======================================================
 
-  Future<Response> getProfile()
+  Future<ProfileModel?> getProfile()
       async {
 
-    return await dio.get(
-      '/profile',
-    );
+    try {
 
+      final user =
+          supabase.auth.currentUser;
+
+      if (user == null) {
+        return null;
+      }
+
+      final response =
+          await supabase
+              .from('profiles')
+              .select()
+              .eq('id', user.id)
+              .maybeSingle();
+
+      // ==========================================
+      // CREATE PROFILE IF NOT EXISTS
+      // ==========================================
+
+      if (response == null) {
+
+        final newProfile = {
+
+          'id': user.id,
+
+          'full_name':
+              user.email
+                  ?.split('@')
+                  .first,
+
+          'photo_url': null,
+        };
+
+        await supabase
+            .from('profiles')
+            .insert(
+              newProfile,
+            );
+
+        return ProfileModel
+            .fromJson(
+          newProfile,
+        );
+      }
+
+      return ProfileModel
+          .fromJson(response);
+
+    } catch (e) {
+
+      debugPrint(
+        'GET PROFILE ERROR => $e',
+      );
+
+      return null;
+    }
   }
 
   // ======================================================
   // UPDATE PROFILE
   // ======================================================
 
-  Future<Response> updateProfile({
+  Future<void> updateProfile(
+    ProfileModel profile,
+  ) async {
 
-    required String fullName,
+    try {
 
-    required String username,
+      await supabase
+          .from('profiles')
+          .upsert(
+            profile.toJson(),
+          );
 
-    String? phoneNumber,
+    } catch (e) {
 
-    String? bio,
+      debugPrint(
+        'UPDATE PROFILE ERROR => $e',
+      );
 
-    int? age,
-
-    double? weight,
-
-    double? height,
-
-  }) async {
-
-    return await dio.put(
-
-      '/profile',
-
-      data: {
-
-        'full_name':
-            fullName,
-
-        'username':
-            username,
-
-        'phone_number':
-            phoneNumber,
-
-        'bio':
-            bio,
-
-        'age':
-            age,
-
-        'weight':
-            weight,
-
-        'height':
-            height,
-
-      },
-
-    );
-
+      rethrow;
+    }
   }
 
   // ======================================================
-  // DELETE ACCOUNT
+  // DELETE PROFILE
   // ======================================================
 
-  Future<Response> deleteAccount()
+  Future<void> deleteProfile()
       async {
 
-    return await dio.delete(
-      '/profile',
-    );
+    try {
 
+      final user =
+          supabase.auth.currentUser;
+
+      if (user == null) return;
+
+      await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', user.id);
+
+    } catch (e) {
+
+      debugPrint(
+        'DELETE PROFILE ERROR => $e',
+      );
+
+      rethrow;
+    }
   }
 
+  // ======================================================
+  // LOGOUT
+  // ======================================================
+
+  Future<void> logout() async {
+
+    try {
+
+      await supabase.auth
+          .signOut();
+
+    } catch (e) {
+
+      debugPrint(
+        'LOGOUT ERROR => $e',
+      );
+
+      rethrow;
+    }
+  }
 }

@@ -1,8 +1,3 @@
-// ======================================================
-// FILE:
-// lib/features/profile/providers/profile_provider.dart
-// ======================================================
-
 import 'package:flutter/material.dart';
 
 import '../models/profile_model.dart';
@@ -43,65 +38,40 @@ class ProfileProvider
       _error;
 
   // ======================================================
-  // SET LOADING
-  // ======================================================
-
-  void _setLoading(
-    bool value,
-  ) {
-
-    _isLoading = value;
-
-    notifyListeners();
-
-  }
-
-  // ======================================================
-  // SET ERROR
-  // ======================================================
-
-  void _setError(
-    String? value,
-  ) {
-
-    _error = value;
-
-    notifyListeners();
-
-  }
-
-  // ======================================================
   // FETCH PROFILE
   // ======================================================
 
   Future<void> fetchProfile()
       async {
 
+    if (_isLoading) return;
+
     try {
 
-      _setLoading(true);
+      _isLoading = true;
 
-      final response =
-          await _service
-              .getProfile();
-
-      _profile =
-          ProfileModel.fromJson(
-        response.data['data'],
-      );
+      _error = null;
 
       notifyListeners();
 
+      _profile =
+          await _service
+              .getProfile();
+
     } catch (e) {
 
-      _setError(e.toString());
+      debugPrint(
+        'PROFILE FETCH ERROR => $e',
+      );
+
+      _error = e.toString();
 
     } finally {
 
-      _setLoading(false);
+      _isLoading = false;
 
+      notifyListeners();
     }
-
   }
 
   // ======================================================
@@ -112,108 +82,67 @@ class ProfileProvider
 
     required String fullName,
 
-    required String username,
-
-    String? phoneNumber,
-
-    String? bio,
-
-    int? age,
-
-    double? weight,
-
-    double? height,
+    String? avatarUrl,
 
   }) async {
 
     try {
 
-      _setLoading(true);
+      _isLoading = true;
 
-      _setError(null);
+      _error = null;
 
-      final response =
-          await _service
-              .updateProfile(
+      notifyListeners();
+
+      final updated =
+          _profile?.copyWith(
 
         fullName:
             fullName,
 
-        username:
-            username,
-
-        phoneNumber:
-            phoneNumber,
-
-        bio:
-            bio,
-
-        age:
-            age,
-
-        weight:
-            weight,
-
-        height:
-            height,
-
+        avatarUrl:
+            avatarUrl,
       );
 
-      _profile =
-          ProfileModel.fromJson(
-        response.data['data'],
-      );
-
-      notifyListeners();
-
-      return true;
-
-    } catch (e) {
-
-      _setError(e.toString());
-
-      return false;
-
-    } finally {
-
-      _setLoading(false);
-
-    }
-
-  }
-
-  // ======================================================
-  // DELETE ACCOUNT
-  // ======================================================
-
-  Future<bool> deleteAccount()
-      async {
-
-    try {
-
-      _setLoading(true);
+      if (updated == null) {
+        return false;
+      }
 
       await _service
-          .deleteAccount();
+          .updateProfile(
+        updated,
+      );
 
-      _profile = null;
-
-      notifyListeners();
+      _profile = updated;
 
       return true;
 
     } catch (e) {
 
-      _setError(e.toString());
+      debugPrint(
+        'PROFILE UPDATE ERROR => $e',
+      );
+
+      _error = e.toString();
 
       return false;
 
     } finally {
 
-      _setLoading(false);
+      _isLoading = false;
 
+      notifyListeners();
     }
-
   }
 
+  // ======================================================
+  // CLEAR
+  // ======================================================
+
+  void clearProfile() {
+
+    _profile = null;
+
+    notifyListeners();
+  }
 }

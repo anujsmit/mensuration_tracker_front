@@ -23,6 +23,7 @@ import 'features/auth/screens/login_screen.dart';
 // ======================================================
 
 import 'features/profile/providers/profile_provider.dart';
+import 'features/profile/providers/health_profile_provider.dart';
 
 // ======================================================
 // CYCLES
@@ -187,11 +188,15 @@ class MyApp extends StatelessWidget {
         // PROFILE
         // ==============================================
 
-        ChangeNotifierProvider(
-          create: (_) =>
-              ProfileProvider(),
-        ),
+    ChangeNotifierProvider(
+      create: (_) =>
+          ProfileProvider(),
+    ),
 
+    ChangeNotifierProvider(
+      create: (_) =>
+          HealthProfileProvider(),
+    ),
         // ==============================================
         // CYCLES
         // ==============================================
