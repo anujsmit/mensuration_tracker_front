@@ -9,7 +9,6 @@ class PadsService {
   PadsService() {
     _dio = DioClient().dio;
   }
-
   // Save pads usage
   Future<PadsTracking?> savePadsTracking(PadsTracking tracking) async {
     try {

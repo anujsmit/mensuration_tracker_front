@@ -1,26 +1,58 @@
-// lib/core/network/dio_client.dart
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DioClient {
+  // ======================================================
+  // SINGLETON
+  // ======================================================
+
   static final DioClient _instance = DioClient._internal();
   factory DioClient() => _instance;
   DioClient._internal();
 
+  // ======================================================
+  // STORAGE
+  // ======================================================
+
   final FlutterSecureStorage storage = const FlutterSecureStorage();
-  late Dio dio;
+
+  // ======================================================
+  // DIO
+  // ======================================================
+
+  late Dio _dio;
   bool _isInitialized = false;
+
+  // ======================================================
+  // GETTERS
+  // ======================================================
+
+  /// Get the Dio instance (auto-initializes if needed)
+  Dio get dio {
+    if (!_isInitialized) {
+      throw Exception('DioClient not initialized. Call initialize() first.');
+    }
+    return _dio;
+  }
+
+  /// Alternative getter for backward compatibility
+  Dio get client => dio;
+
+  // ======================================================
+  // INITIALIZE
+  // ======================================================
 
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // CHANGE THIS TO YOUR IP ADDRESS
-    const String baseUrl = 'http://192.168.1.69:5000/api';
+    // UPDATE THIS URL TO YOUR CORRECT BACKEND IP
+    // For Android emulator: http://10.0.2.2:5000/api
+    // For physical device: http://YOUR_COMPUTER_IP:5000/api
+    const String baseUrl = 'http://192.168.1.69:5000/api'; // Change this to your IP
     
-    debugPrint('🌐 Connecting to: $baseUrl');
+    print('🌐 Initializing DioClient with baseUrl: $baseUrl');
 
-    dio = Dio(
+    _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 30),
@@ -29,103 +61,100 @@ class DioClient {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        validateStatus: (status) {
-          return status != null && status < 500;
-        },
+        validateStatus: (status) => status != null && status < 500,
       ),
     );
 
-    // Add interceptors
-    dio.interceptors.add(
+    _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final token = await storage.read(key: 'access_token');
-          
+
           if (token != null && token.isNotEmpty) {
-            // IMPORTANT: Remove any whitespace and ensure proper format
             final cleanToken = token.trim();
-            // Set the header correctly - no line breaks or extra spaces
             options.headers['Authorization'] = 'Bearer $cleanToken';
             
-            // Debug log
-            final tokenPreview = cleanToken.length > 30 
-                ? '${cleanToken.substring(0, 30)}...' 
-                : cleanToken;
-            debugPrint('🔑 Token attached (${cleanToken.length} chars): $tokenPreview');
+            // Debug token type
+            final tokenType = cleanToken.contains('FUzI1Ni') ? 'Supabase (ES256)' : 'Local (HS256)';
+            print('🔑 Token attached: $tokenType');
           } else {
-            debugPrint('⚠️ No token found');
+            print('⚠️ No token found');
           }
-          
-          debugPrint('📤 ${options.method} ${options.path}');
+
+          print('📤 REQUEST: ${options.method} ${options.path}');
           if (options.data != null) {
-            debugPrint('📦 Request data: ${options.data}');
+            print('📦 Request data: ${options.data}');
           }
-          
-          // Validate header before sending
-          final authHeader = options.headers['Authorization'];
-          if (authHeader != null && authHeader.toString().contains('\n')) {
-            debugPrint('❌ ERROR: Authorization header contains line break!');
-            // Fix it
-            options.headers['Authorization'] = authHeader.toString().replaceAll('\n', '').replaceAll(' ', ' ');
-          }
-          
+
           return handler.next(options);
         },
         onResponse: (response, handler) {
-          debugPrint('📥 ${response.statusCode} ${response.requestOptions.path}');
+          print('📥 RESPONSE: ${response.statusCode} ${response.requestOptions.path}');
           if (response.statusCode == 200 || response.statusCode == 201) {
-            debugPrint('✅ Success');
-          } else {
-            debugPrint('⚠️ Status: ${response.statusCode}');
+            print('✅ Success');
           }
           return handler.next(response);
         },
         onError: (DioException error, handler) async {
-          debugPrint('❌ Error: ${error.message}');
-          debugPrint('❌ URL: ${error.requestOptions.path}');
+          print('❌ ERROR: ${error.message}');
+          print('❌ URL: ${error.requestOptions.path}');
           
           if (error.response != null) {
-            debugPrint('❌ Status: ${error.response?.statusCode}');
-            debugPrint('❌ Response: ${error.response?.data}');
-            
-            if (error.response?.statusCode == 401) {
-              debugPrint('🔐 Unauthorized - Invalid token');
-              await storage.delete(key: 'access_token');
-              await storage.delete(key: 'refresh_token');
-            }
+            print('❌ Status: ${error.response?.statusCode}');
+            print('❌ Response: ${error.response?.data}');
           }
-          
+
+          if (error.response?.statusCode == 401) {
+            print('🔐 Unauthorized - Token may be expired');
+            await storage.delete(key: 'access_token');
+            print('🔐 Token cleared. Please login again.');
+          }
+
           return handler.next(error);
         },
       ),
     );
 
-    if (kDebugMode) {
-      dio.interceptors.add(LogInterceptor(
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: true,
-        responseBody: true,
-        error: true,
-        logPrint: (obj) => debugPrint(obj.toString()),
-      ));
-    }
-
     _isInitialized = true;
-    debugPrint('✅ DioClient initialized');
+    print('✅ DioClient initialized successfully');
   }
 
-  Future<void> ensureInitialized() async {
-    if (!_isInitialized) {
-      await initialize();
-    }
+  // ======================================================
+  // CONVENIENCE METHODS
+  // ======================================================
+
+  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) async {
+    await initialize();
+    return _dio.get(path, queryParameters: queryParameters);
   }
+
+  Future<Response> post(String path, {dynamic data}) async {
+    await initialize();
+    return _dio.post(path, data: data);
+  }
+
+  Future<Response> put(String path, {dynamic data}) async {
+    await initialize();
+    return _dio.put(path, data: data);
+  }
+
+  Future<Response> delete(String path) async {
+    await initialize();
+    return _dio.delete(path);
+  }
+
+  Future<Response> patch(String path, {dynamic data}) async {
+    await initialize();
+    return _dio.patch(path, data: data);
+  }
+
+  // ======================================================
+  // TOKEN MANAGEMENT
+  // ======================================================
 
   Future<void> setAuthToken(String token) async {
-    // Clean the token before storing
-    final cleanToken = token.trim();
-    await storage.write(key: 'access_token', value: cleanToken);
-    debugPrint('🔑 Auth token stored (${cleanToken.length} chars)');
+    await storage.write(key: 'access_token', value: token);
+    print('🔑 Auth token stored');
   }
 
   Future<String?> getAuthToken() async {
@@ -134,14 +163,6 @@ class DioClient {
 
   Future<void> clearAuthToken() async {
     await storage.delete(key: 'access_token');
-    await storage.delete(key: 'refresh_token');
-    debugPrint('🔑 Auth tokens cleared');
-  }
-
-  Dio get client {
-    if (!_isInitialized) {
-      throw Exception('DioClient not initialized. Call initialize() first.');
-    }
-    return dio;
+    print('🔑 Auth token cleared');
   }
 }

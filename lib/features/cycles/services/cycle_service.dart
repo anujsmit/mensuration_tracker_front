@@ -1,22 +1,20 @@
+// lib/services/cycle_service.dart
 import 'package:dio/dio.dart';
-import '../../../core/network/dio_client.dart';
+import 'package:flutter/widgets.dart';
+import 'package:mensurationhealthapp/core/network/dio_client.dart';
 
 class CycleService {
-  // ======================================================
-  // DIO
-  // ======================================================
-
   late final Dio _dio;
-  
-  CycleService() {
-    _dio = DioClient().dio;
+  bool _isInitialized = false;
+
+  Future<void> _ensureInitialized() async {
+    if (!_isInitialized) {
+      final dioClient = DioClient();
+      await dioClient.initialize();
+      _dio = dioClient.client;
+      _isInitialized = true;
+    }
   }
-
-  Dio get dio => _dio;
-
-  // ======================================================
-  // CREATE CYCLE
-  // ======================================================
 
   Future<Response> createCycle({
     required String startDate,
@@ -25,52 +23,50 @@ class CycleService {
     int? periodLength,
     String? notes,
   }) async {
+    await _ensureInitialized();
+    
     try {
-      return await dio.post(
-        '/cycles',
-        data: {
-          'start_date': startDate,
-          if (endDate != null) 'end_date': endDate,
-          if (cycleLength != null) 'cycle_length': cycleLength,
-          if (periodLength != null) 'period_length': periodLength,
-          if (notes != null) 'notes': notes,
-        },
-      );
+      final data = {
+        'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+        if (cycleLength != null) 'cycle_length': cycleLength,
+        if (periodLength != null) 'period_length': periodLength,
+        if (notes != null) 'notes': notes,
+      };
+      
+      debugPrint('📝 Creating cycle with data: $data');
+      
+      final response = await _dio.post('/cycles', data: data);
+      return response;
     } catch (e) {
-      print('Error in createCycle: $e');
+      debugPrint('❌ Error in createCycle: $e');
       rethrow;
     }
   }
-
-  // ======================================================
-  // GET CYCLES
-  // ======================================================
 
   Future<Response> getCycles() async {
+    await _ensureInitialized();
+    
     try {
-      return await dio.get('/cycles');
+      final response = await _dio.get('/cycles');
+      return response;
     } catch (e) {
-      print('Error in getCycles: $e');
+      debugPrint('❌ Error in getCycles: $e');
       rethrow;
     }
   }
-
-  // ======================================================
-  // GET SINGLE CYCLE
-  // ======================================================
 
   Future<Response> getCycle(String id) async {
+    await _ensureInitialized();
+    
     try {
-      return await dio.get('/cycles/$id');
+      final response = await _dio.get('/cycles/$id');
+      return response;
     } catch (e) {
-      print('Error in getCycle: $e');
+      debugPrint('❌ Error in getCycle: $e');
       rethrow;
     }
   }
-
-  // ======================================================
-  // UPDATE CYCLE
-  // ======================================================
 
   Future<Response> updateCycle({
     required String id,
@@ -80,32 +76,33 @@ class CycleService {
     int? periodLength,
     String? notes,
   }) async {
+    await _ensureInitialized();
+    
     try {
-      return await dio.put(
-        '/cycles/$id',
-        data: {
-          if (startDate != null) 'start_date': startDate,
-          if (endDate != null) 'end_date': endDate,
-          if (cycleLength != null) 'cycle_length': cycleLength,
-          if (periodLength != null) 'period_length': periodLength,
-          if (notes != null) 'notes': notes,
-        },
-      );
+      final data = {
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+        if (cycleLength != null) 'cycle_length': cycleLength,
+        if (periodLength != null) 'period_length': periodLength,
+        if (notes != null) 'notes': notes,
+      };
+      
+      final response = await _dio.put('/cycles/$id', data: data);
+      return response;
     } catch (e) {
-      print('Error in updateCycle: $e');
+      debugPrint('❌ Error in updateCycle: $e');
       rethrow;
     }
   }
 
-  // ======================================================
-  // DELETE CYCLE
-  // ======================================================
-
   Future<Response> deleteCycle(String id) async {
+    await _ensureInitialized();
+    
     try {
-      return await dio.delete('/cycles/$id');
+      final response = await _dio.delete('/cycles/$id');
+      return response;
     } catch (e) {
-      print('Error in deleteCycle: $e');
+      debugPrint('❌ Error in deleteCycle: $e');
       rethrow;
     }
   }
